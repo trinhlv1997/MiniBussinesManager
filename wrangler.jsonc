@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "mini-business-manager",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-11-01",
+  "workers_dev": true,
+  "observability": { "enabled": true },
+  "assets": {
+    "not_found_handling": "single-page-application",
+    // Chỉ API mới gọi Worker; file tĩnh được phục vụ trực tiếp, không tính CPU của Worker.
+    "run_worker_first": ["/api/*"]
+  },
+  "vars": { "APP_ENV": "production" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mini-business-manager",
+      // Thay bằng database_id thật từ `wrangler d1 create` trước khi deploy.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
