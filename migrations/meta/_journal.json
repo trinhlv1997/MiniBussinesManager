@@ -50,6 +50,13 @@
       "when": 1794993176034,
       "tag": "0006_export_unit_cost",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1795269483222,
+      "tag": "0007_customer_tier_employee_salary",
+      "breakpoints": true
     }
   ]
 }

@@ -2,8 +2,8 @@ import { vnToday } from "@shared/format";
 import type { ApiFailure } from "@shared/api";
 import { ApiClientError } from "./api";
 
-/** Downloads a CSV and reports whether the server had to cut it short. */
-export async function downloadCsv(path: string, fileName: string): Promise<{ truncated: boolean }> {
+/** Downloads an Excel (.xlsx) export and reports whether the server had to cut it short. */
+export async function downloadExcel(path: string, fileName: string): Promise<{ truncated: boolean }> {
   let response: Response;
   try {
     response = await fetch(`/api${path}`, { credentials: "same-origin" });
@@ -22,7 +22,7 @@ export async function downloadCsv(path: string, fileName: string): Promise<{ tru
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
   link.href = url;
-  link.download = `${fileName}-${vnToday()}.csv`;
+  link.download = `${fileName}-${vnToday()}.xlsx`;
   link.click();
   URL.revokeObjectURL(url);
   return { truncated: response.headers.get("X-Export-Truncated") === "1" };

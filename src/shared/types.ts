@@ -1,4 +1,5 @@
 import type {
+  CustomerTier,
   CustomerType,
   EmployeeStatus,
   ProductStatus,
@@ -17,6 +18,8 @@ export type Employee = {
   hireDate: string | null;
   status: EmployeeStatus;
   address: string | null;
+  /** Lương cơ bản hằng tháng, VND nguyên; null khi chưa nhập. */
+  baseSalary: number | null;
   note: string | null;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +31,7 @@ export type Customer = {
   code: string;
   name: string;
   type: CustomerType;
+  tier: CustomerTier;
   contactName: string | null;
   phone: string | null;
   email: string | null;
@@ -181,6 +185,8 @@ export type EmployeeReport = {
   active: number;
   onLeave: number;
   resigned: number;
+  /** Tổng lương cơ bản của nhân viên đang làm việc. */
+  activePayroll: number;
   hires: CountPoint[];
 };
 
@@ -188,6 +194,7 @@ export type CustomerReport = {
   total: number;
   individual: number;
   business: number;
+  vip: number;
   newInRange: number;
   series: CountPoint[];
 };

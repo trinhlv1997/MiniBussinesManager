@@ -17,7 +17,7 @@ import {
   inventoryTransactions as transactions,
   products,
 } from "../../db/schema";
-import type { CsvColumn } from "../lib/csv";
+import type { ExportColumn } from "../lib/export";
 import { auditQuery, dbErrorText, matchSearch, notFound, pageOffset, runBatch, toPage } from "../lib/db";
 import { ApiError } from "../lib/errors";
 
@@ -506,7 +506,7 @@ export async function getTransaction(db: Db, id: number): Promise<InventoryTrans
   };
 }
 
-export const TRANSACTION_CSV: CsvColumn<InventoryTransaction>[] = [
+export const TRANSACTION_EXPORT: ExportColumn<InventoryTransaction>[] = [
   { header: "Mã phiếu", value: (row) => row.code },
   { header: "Loại phiếu", value: (row) => TRANSACTION_TYPE_LABELS[row.type] },
   { header: "Trạng thái", value: (row) => TRANSACTION_STATUS_LABELS[row.status] },

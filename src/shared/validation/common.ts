@@ -78,6 +78,15 @@ export const money = z
   .min(0, "Số tiền không được âm")
   .max(MAX_MONEY, "Số tiền quá lớn");
 
+/** Tiền không bắt buộc: bỏ trống thì lưu null. */
+export const optionalMoney = z
+  .number("Vui lòng nhập số tiền")
+  .int("Số tiền phải là số nguyên")
+  .min(0, "Số tiền không được âm")
+  .max(MAX_MONEY, "Số tiền quá lớn")
+  .nullish()
+  .transform((value) => value ?? null);
+
 export const optionalImage = z
   .string()
   .max(MAX_IMAGE_LENGTH, "Ảnh quá lớn")

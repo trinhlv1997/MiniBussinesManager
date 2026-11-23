@@ -11,7 +11,7 @@ import {
 import { reportQuery } from "@shared/validation/reports";
 import { createDb } from "../../db/client";
 import type { AppEnv } from "../env";
-import { MAX_EXPORT_ROWS, csvResponse, type CsvColumn } from "../lib/csv";
+import { MAX_EXPORT_ROWS, excelResponse, type ExportColumn } from "../lib/export";
 import { readBatch } from "../lib/db";
 import { ok } from "../lib/http";
 import { parseQuery } from "../lib/resource-routes";
@@ -25,13 +25,13 @@ import {
   inventoryHistoryCount,
   inventoryHistoryQuery,
 } from "../services/analytics";
-import { CUSTOMER_CSV, listCustomers } from "../services/customers";
-import { EMPLOYEE_CSV, listEmployees } from "../services/employees";
-import { PRODUCT_CSV, listProducts } from "../services/products";
+import { CUSTOMER_EXPORT, listCustomers } from "../services/customers";
+import { EMPLOYEE_EXPORT, listEmployees } from "../services/employees";
+import { PRODUCT_EXPORT, listProducts } from "../services/products";
 
 const EXPORT_PAGE = { page: 1, pageSize: MAX_EXPORT_ROWS };
 
-const HISTORY_CSV: CsvColumn<InventoryHistoryRow>[] = [
+const HISTORY_EXPORT: ExportColumn<InventoryHistoryRow>[] = [
   { header: "Ngày", value: (row) => formatDate(row.transactionDate) },
   { header: "Mã phiếu", value: (row) => row.code },
   { header: "Loại phiếu", value: (row) => TRANSACTION_TYPE_LABELS[row.type] },
@@ -68,7 +68,7 @@ export const reportRoutes = new Hono<AppEnv>()
   .get("/employees/export", async (c) => {
     const query = { ...employeeListQuery.parse({}), ...EXPORT_PAGE };
     const { items, pagination } = await listEmployees(createDb(c.env.DB), query);
-    return csvResponse(c, "bao-cao-nhan-vien", EMPLOYEE_CSV, items, pagination.total);
+    return excelResponse(c, { fileName: "bao-cao-nhan-vien", sheetName: "Báo cáo nhân viên", columns: EMPLOYEE_EXPORT, rows: items, total: pagination.total });
   })
   .get("/customers/export", async (c) => {
     const { from, to } = parseQuery(c, dateRangeQuery);
@@ -79,13 +79,13 @@ export const reportRoutes = new Hono<AppEnv>()
       createdTo: to,
     };
     const { items, pagination } = await listCustomers(createDb(c.env.DB), query);
-    return csvResponse(c, "bao-cao-khach-hang", CUSTOMER_CSV, items, pagination.total);
+    return excelResponse(c, { fileName: "bao-cao-khach-hang", sheetName: "Báo cáo khách hàng", columns: CUSTOMER_EXPORT, rows: items, total: pagination.total });
   })
   .get("/products/export", async (c) => {
     const { categoryId } = parseQuery(c, reportQuery);
     const query = { ...productListQuery.parse({}), ...EXPORT_PAGE, categoryId };
     const { items, pagination } = await listProducts(createDb(c.env.DB), query);
-    return csvResponse(c, "bao-cao-san-pham", PRODUCT_CSV, items, pagination.total);
+    return excelResponse(c, { fileName: "bao-cao-san-pham", sheetName: "Báo cáo sản phẩm", columns: PRODUCT_EXPORT, rows: items, total: pagination.total });
   })
   .get("/inventory/export", async (c) => {
     const db = createDb(c.env.DB);
@@ -94,5 +94,5 @@ export const reportRoutes = new Hono<AppEnv>()
       inventoryHistoryQuery(db, query, MAX_EXPORT_ROWS, 0),
       inventoryHistoryCount(db, query),
     ])) as [InventoryHistoryRow[], { total: number }[]];
-    return csvResponse(c, "bao-cao-kho", HISTORY_CSV, rows, count[0]?.total ?? 0);
+    return excelResponse(c, { fileName: "bao-cao-kho", sheetName: "Báo cáo kho", columns: HISTORY_EXPORT, rows, total: count[0]?.total ?? 0 });
   });

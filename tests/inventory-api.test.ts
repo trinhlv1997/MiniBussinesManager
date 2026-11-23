@@ -9,6 +9,7 @@ import type {
   ProductReport,
 } from "../src/shared/types";
 import { api, createAdmin, loginAsAdmin } from "./helpers";
+import { readXlsx } from "./xlsx-reader";
 
 let cookie = "";
 const today = vnToday();
@@ -475,11 +476,22 @@ describe("reports", () => {
     expect(books.history.items.map((row) => row.sku)).toEqual(["SO"]);
   });
 
-  it.each(["employees", "customers", "products", "inventory"])("exports %s as CSV", async (kind) => {
+  it.each(["employees", "customers", "products", "inventory"])("exports %s as Excel", async (kind) => {
     await create("import", PEN, 1);
     const response = await api(`/api/reports/${kind}/export?${range}`, { cookie });
     expect(response.status).toBe(200);
-    expect(response.headers.get("content-type")).toContain("text/csv");
-    expect((await response.text()).split("\r\n").length).toBeGreaterThan(2);
+    expect(response.headers.get("content-type")).toContain("spreadsheetml.sheet");
+    expect(response.headers.get("content-disposition")).toMatch(/filename="bao-cao-[a-z-]+\.xlsx"/);
+    const sheet = await readXlsx(response);
+    expect(sheet.sheetName).toMatch(/^Báo cáo /);
+    expect(sheet.dataRows.length).toBeGreaterThan(0);
+  });
+
+  it("exports inventory documents with numeric totals", async () => {
+    await create("import", PEN, 7);
+    const sheet = await readXlsx(await api("/api/inventory/transactions/export", { cookie }));
+    expect(sheet.sheetName).toBe("Phiếu kho");
+    expect(sheet.cell(0, "Tổng số lượng")).toMatchObject({ type: "number", value: "7" });
+    expect(sheet.cell(0, "Ngày")?.type).toBe("date");
   });
 });

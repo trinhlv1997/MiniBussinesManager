@@ -6,7 +6,7 @@ import type { Employee, EmployeeDetail } from "@shared/types";
 import type { EmployeeInput, EmployeeListQuery } from "@shared/validation/entities";
 import type { Db } from "../../db/client";
 import { employees } from "../../db/schema";
-import type { CsvColumn } from "../lib/csv";
+import type { ExportColumn } from "../lib/export";
 import {
   LAST_INSERT_ID,
   auditQuery,
@@ -30,11 +30,12 @@ const SORT_COLUMNS = {
   fullName: employees.fullName,
   hireDate: employees.hireDate,
   status: employees.status,
+  baseSalary: employees.baseSalary,
   createdAt: employees.createdAt,
 };
 
 const searchTextOf = (input: EmployeeInput, code: string) =>
-  toSearchText(code, input.fullName, input.phone, input.email, input.position);
+  toSearchText(code, input.fullName, input.phone, input.email, input.position, input.address);
 
 function rethrow(error: unknown): never {
   if (dbErrorText(error).includes("UNIQUE constraint failed")) {
@@ -111,7 +112,7 @@ export async function deleteEmployee(db: Db, actorId: number, id: number) {
   ]);
 }
 
-export const EMPLOYEE_CSV: CsvColumn<Employee>[] = [
+export const EMPLOYEE_EXPORT: ExportColumn<Employee>[] = [
   { header: "Mã nhân viên", value: (row) => row.code },
   { header: "Họ và tên", value: (row) => row.fullName },
   { header: "Số điện thoại", value: (row) => row.phone },
@@ -120,5 +121,7 @@ export const EMPLOYEE_CSV: CsvColumn<Employee>[] = [
   { header: "Ngày vào làm", value: (row) => formatDate(row.hireDate) },
   { header: "Trạng thái", value: (row) => EMPLOYEE_STATUS_LABELS[row.status] },
   { header: "Địa chỉ", value: (row) => row.address },
+  // Số nguyên VND (không định dạng) để bảng tính cộng trừ được.
+  { header: "Lương cơ bản (VND)", value: (row) => row.baseSalary },
   { header: "Ghi chú", value: (row) => row.note },
 ];

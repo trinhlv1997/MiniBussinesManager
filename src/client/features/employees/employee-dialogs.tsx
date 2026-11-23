@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { formatDate, formatDateTime } from "@shared/format";
+import { formatDate, formatDateTime, formatVnd } from "@shared/format";
 import { EMPLOYEE_STATUS_LABELS } from "@shared/labels";
 import type { EmployeeDetail } from "@shared/types";
 import {
@@ -9,7 +9,7 @@ import {
   type EmployeeInput,
 } from "@shared/validation/entities";
 import { AppDialog, DetailGrid, FormDialog } from "@/components/common/dialogs";
-import { DateField, ImageField, SelectField, TextareaField } from "@/components/common/form-controls";
+import { DateField, ImageField, NumberField, SelectField, TextareaField } from "@/components/common/form-controls";
 import { FormField } from "@/components/common/form-field";
 import { optionsFrom } from "@/components/common/list-controls";
 import { ErrorState, PageSkeleton } from "@/components/common/states";
@@ -32,6 +32,7 @@ function EmployeeForm({ employee, onClose }: { employee?: EmployeeDetail; onClos
       hireDate: employee?.hireDate ?? "",
       status: employee?.status ?? "active",
       address: employee?.address ?? "",
+      baseSalary: employee?.baseSalary ?? null,
       note: employee?.note ?? "",
       avatar: employee?.avatar ?? "",
     },
@@ -71,6 +72,12 @@ function EmployeeForm({ employee, onClose }: { employee?: EmployeeDetail; onClos
           name="status"
           label="Trạng thái"
           options={optionsFrom(EMPLOYEE_STATUS_LABELS)}
+        />
+        <NumberField
+          control={form.control}
+          name="baseSalary"
+          label="Lương cơ bản (₫/tháng)"
+          placeholder="Để trống nếu chưa có"
         />
         <FormField label="Địa chỉ" error={errors.address} {...form.register("address")} />
       </div>
@@ -112,6 +119,7 @@ export function EmployeeDetailDialog({ id, onClose }: { id: number; onClose: () 
               ["Email", data.email],
               ["Chức vụ", data.position],
               ["Ngày vào làm", formatDate(data.hireDate)],
+              ["Lương cơ bản", data.baseSalary === null ? null : `${formatVnd(data.baseSalary)}/tháng`],
               ["Địa chỉ", data.address],
               ["Cập nhật lần cuối", formatDateTime(data.updatedAt)],
               ["Ghi chú", data.note],

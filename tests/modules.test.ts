@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeEach, describe, expect, it } from "vitest";
+import { addDays, vnToday } from "../src/shared/format";
 import { api, createAdmin, loginAsAdmin } from "./helpers";
+import { readXlsx } from "./xlsx-reader";
 
 let cookie = "";
 
@@ -113,16 +115,20 @@ describe("employees", () => {
     expect((await api("/api/employees?sort=password", { cookie })).status).toBe(422);
   });
 
-  it("exports safe CSV with a byte order mark", async () => {
-    await created("/api/employees", { ...employee, note: '=HYPERLINK("x"), "y"' });
+  it("exports an Excel file with typed cells and no formulas", async () => {
+    await created("/api/employees", { ...employee, hireDate: "2024-03-15", note: '=HYPERLINK("x"), "y"' });
     const response = await api("/api/employees/export", { cookie });
-    expect(response.headers.get("content-type")).toContain("text/csv");
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    expect([...bytes.slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
-    const text = new TextDecoder().decode(bytes);
-    expect(text).toContain("Nguyễn Văn Đức");
-    expect(text).toContain("Đang làm việc");
-    expect(text).toContain(`"'=HYPERLINK(""x""), ""y"""`);
+    expect(response.headers.get("content-type")).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(response.headers.get("content-disposition")).toContain('filename="nhan-vien.xlsx"');
+    const sheet = await readXlsx(response);
+    expect(sheet.sheetName).toBe("Nhân viên");
+    expect(sheet.cell(0, "Họ và tên")).toMatchObject({ type: "text", value: "Nguyễn Văn Đức" });
+    expect(sheet.cell(0, "Trạng thái")?.value).toBe("Đang làm việc");
+    // Số điện thoại giữ số 0 ở đầu; ngày vào làm là ngày thật của Excel.
+    expect(sheet.cell(0, "Số điện thoại")).toMatchObject({ type: "text", value: "0912345678" });
+    expect(sheet.cell(0, "Ngày vào làm")?.type).toBe("date");
+    expect(sheet.cell(0, "Ghi chú")).toMatchObject({ type: "text", value: '=HYPERLINK("x"), "y"' });
+    expect(sheet.files.get("xl/worksheets/sheet1.xml")).not.toContain("<f>");
   });
 });
 
@@ -159,6 +165,108 @@ describe("customers", () => {
     expect(detail.notes.map((item) => item.content)).toEqual(["Gọi lại vào thứ Hai"]);
     expect((await send(`/api/customers/${row.id + 1}/notes/${note.id}`, "DELETE")).status).toBe(404);
     expect((await send(`/api/customers/${row.id}/notes/${note.id}`, "DELETE")).status).toBe(200);
+  });
+});
+
+describe("employee base salary and address", () => {
+  const range = `from=${addDays(vnToday(), -6)}&to=${vnToday()}`;
+
+  it("stores an optional whole-VND base salary", async () => {
+    const row = await created("/api/employees", { ...employee, baseSalary: 12_500_000 });
+    expect((await read<{ baseSalary: number }>(`/api/employees/${row.id}`)).baseSalary).toBe(12_500_000);
+
+    const blank = await created("/api/employees", { fullName: "Trần Thị Bình", status: "active" });
+    expect((await read<{ baseSalary: number | null }>(`/api/employees/${blank.id}`)).baseSalary).toBeNull();
+
+    const cleared = await send(`/api/employees/${row.id}`, "PUT", { ...employee, baseSalary: null });
+    expect(cleared.status).toBe(200);
+    expect((await read<{ baseSalary: number | null }>(`/api/employees/${row.id}`)).baseSalary).toBeNull();
+  });
+
+  it.each([-1, 1.5, 2_000_000_000_000, "10tr"])("rejects base salary %s", async (baseSalary) => {
+    const response = await send("/api/employees", "POST", { ...employee, baseSalary });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: { fields: { baseSalary: expect.any(String) } } });
+  });
+
+  it("keeps the CHECK constraint in the database", async () => {
+    const row = await created("/api/employees", employee);
+    await expect(
+      env.DB.prepare("UPDATE employees SET base_salary = -5 WHERE id = ?").bind(row.id).run(),
+    ).rejects.toThrow(/CHECK constraint failed/);
+  });
+
+  it("sorts by salary, searches by address and exports both", async () => {
+    await created("/api/employees", { ...employee, baseSalary: 9_000_000, address: "45 Nguyễn Trãi, Thanh Xuân" });
+    await created("/api/employees", { fullName: "Lê Hoàng", status: "active", baseSalary: 20_000_000 });
+
+    const sorted = await read<Page<{ baseSalary: number }>>("/api/employees?sort=baseSalary&dir=desc");
+    expect(sorted.items.map((item) => item.baseSalary)).toEqual([20_000_000, 9_000_000]);
+    const byAddress = await read<Page<{ fullName: string }>>("/api/employees?search=nguyen%20trai");
+    expect(byAddress.items.map((item) => item.fullName)).toEqual(["Nguyễn Văn Đức"]);
+
+    const sheet = await readXlsx(await api("/api/employees/export?sort=baseSalary&dir=asc", { cookie }));
+    expect(sheet.headers).toContain("Lương cơ bản (VND)");
+    expect(sheet.cell(0, "Lương cơ bản (VND)")).toMatchObject({ type: "number", value: "9000000" });
+    expect(sheet.cell(0, "Địa chỉ")?.value).toBe("45 Nguyễn Trãi, Thanh Xuân");
+  });
+
+  it("reports the base payroll of active employees only", async () => {
+    await created("/api/employees", { ...employee, baseSalary: 10_000_000 });
+    await created("/api/employees", { fullName: "Trần Thị Bình", status: "active", baseSalary: 7_000_000 });
+    await created("/api/employees", { fullName: "Phạm Văn C", status: "active" });
+    await created("/api/employees", { fullName: "Lê Văn D", status: "resigned", baseSalary: 50_000_000 });
+    expect(await read(`/api/reports/employees?${range}`)).toMatchObject({ total: 4, active: 3, activePayroll: 17_000_000 });
+  });
+});
+
+describe("customer tier", () => {
+  const range = `from=${addDays(vnToday(), -6)}&to=${vnToday()}`;
+
+  it("defaults to normal and accepts VIP", async () => {
+    const normal = await created<{ id: number; tier: string }>("/api/customers", customer);
+    expect(normal.tier).toBe("normal");
+    const vip = await created<{ id: number; tier: string }>("/api/customers", {
+      name: "Trần Minh Quân",
+      type: "individual",
+      tier: "vip",
+    });
+    expect(vip.tier).toBe("vip");
+    expect((await send(`/api/customers/${normal.id}`, "PUT", { ...customer, tier: "vip" })).status).toBe(200);
+    expect((await read<{ tier: string }>(`/api/customers/${normal.id}`)).tier).toBe("vip");
+  });
+
+  it("rejects unknown tiers in the API and the database", async () => {
+    const response = await send("/api/customers", "POST", { ...customer, tier: "gold" });
+    expect(response.status).toBe(422);
+    expect(await response.json()).toMatchObject({ error: { fields: { tier: expect.any(String) } } });
+    expect((await api("/api/customers?tier=gold", { cookie })).status).toBe(422);
+
+    const row = await created("/api/customers", customer);
+    await expect(
+      env.DB.prepare("UPDATE customers SET tier = 'gold' WHERE id = ?").bind(row.id).run(),
+    ).rejects.toThrow(/CHECK constraint failed/);
+  });
+
+  it("filters, sorts VIP first, searches by address, exports and reports", async () => {
+    await created("/api/customers", { ...customer, address: "12 Lý Thường Kiệt, Hà Nội" });
+    await created("/api/customers", { name: "Khách VIP", type: "individual", tier: "vip" });
+    await created("/api/customers", { name: "Khách thường", type: "individual" });
+
+    expect((await read<Page<unknown>>("/api/customers?tier=vip")).pagination.total).toBe(1);
+    expect((await read<Page<unknown>>("/api/customers?tier=normal")).pagination.total).toBe(2);
+    const sorted = await read<Page<{ name: string }>>("/api/customers?sort=tier&dir=desc");
+    expect(sorted.items[0]?.name).toBe("Khách VIP");
+    const byAddress = await read<Page<{ name: string }>>("/api/customers?search=ly%20thuong%20kiet");
+    expect(byAddress.items.map((item) => item.name)).toEqual([customer.name]);
+
+    const sheet = await readXlsx(await api("/api/customers/export?tier=vip", { cookie }));
+    expect(sheet.dataRows).toHaveLength(1);
+    expect(sheet.cell(0, "Tên khách hàng")?.value).toBe("Khách VIP");
+    expect(sheet.cell(0, "Hạng khách hàng")?.value).toBe("VIP");
+    expect(sheet.cell(0, "Ngày tạo")?.type).toBe("date");
+
+    expect(await read(`/api/reports/customers?${range}`)).toMatchObject({ total: 3, vip: 1 });
   });
 });
 

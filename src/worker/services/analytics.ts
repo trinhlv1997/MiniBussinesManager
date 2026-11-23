@@ -290,7 +290,8 @@ export async function getEmployeeReport(db: Db, range: DateRange): Promise<Emplo
       SELECT COUNT(*) AS total,
         COALESCE(SUM(status = 'active'), 0) AS active,
         COALESCE(SUM(status = 'on_leave'), 0) AS onLeave,
-        COALESCE(SUM(status = 'resigned'), 0) AS resigned
+        COALESCE(SUM(status = 'resigned'), 0) AS resigned,
+        COALESCE(SUM(CASE WHEN status = 'active' THEN base_salary END), 0) AS activePayroll
       FROM employees WHERE deleted_at IS NULL`),
     rawQuery(db, sql`
       SELECT hire_date AS day, COUNT(*) AS count FROM employees
@@ -305,7 +306,8 @@ export async function getCustomerReport(db: Db, range: DateRange): Promise<Custo
     rawQuery(db, sql`
       SELECT COUNT(*) AS total,
         COALESCE(SUM(type = 'individual'), 0) AS individual,
-        COALESCE(SUM(type = 'business'), 0) AS business
+        COALESCE(SUM(type = 'business'), 0) AS business,
+        COALESCE(SUM(tier = 'vip'), 0) AS vip
       FROM customers WHERE deleted_at IS NULL`),
     rawQuery(db, sql`
       SELECT date(created_at, '+7 hours') AS day, COUNT(*) AS count FROM customers

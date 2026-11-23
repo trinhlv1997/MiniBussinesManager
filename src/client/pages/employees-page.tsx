@@ -1,5 +1,5 @@
 import { Plus, Users } from "lucide-react";
-import { formatDate } from "@shared/format";
+import { formatDate, formatVnd } from "@shared/format";
 import { EMPLOYEE_STATUS_LABELS } from "@shared/labels";
 import type { Employee } from "@shared/types";
 import { DataTable, type Column } from "@/components/common/data-table";
@@ -35,6 +35,23 @@ export default function EmployeesPage() {
     { key: "fullName", header: "Họ và tên", sortKey: "fullName", cell: (row) => row.fullName },
     { key: "phone", header: "Số điện thoại", className: "hidden md:table-cell", cell: (row) => row.phone ?? "—" },
     { key: "position", header: "Chức vụ", className: "hidden lg:table-cell", cell: (row) => row.position ?? "—" },
+    {
+      key: "baseSalary",
+      header: "Lương cơ bản",
+      sortKey: "baseSalary",
+      className: "hidden lg:table-cell text-right tabular-nums",
+      cell: (row) => (row.baseSalary === null ? "—" : formatVnd(row.baseSalary)),
+    },
+    {
+      key: "address",
+      header: "Địa chỉ",
+      className: "hidden xl:table-cell max-w-56",
+      cell: (row) => (
+        <span className="line-clamp-2 whitespace-normal" title={row.address ?? undefined}>
+          {row.address ?? "—"}
+        </span>
+      ),
+    },
     {
       key: "hireDate",
       header: "Ngày vào làm",
@@ -77,7 +94,7 @@ export default function EmployeesPage() {
       />
       <Toolbar>
         <SearchInput
-          placeholder="Tìm theo tên, mã, số điện thoại"
+          placeholder="Tìm theo tên, mã, SĐT, địa chỉ"
           value={filters.search}
           onChange={(search) => params.update({ search })}
         />

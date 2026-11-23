@@ -43,6 +43,8 @@ scripts      Thiết lập cục bộ, dữ liệu demo, tài khoản quản tr�
 tests        Test chạy trên runtime Workers
 ```
 
+**Lưu ý khi sinh migration:** nếu thay đổi schema cần thêm ràng buộc `CHECK` vào bảng đã có (ví dụ `customers`, `employees`), `drizzle-kit generate` sẽ sinh migration dựng lại bảng bằng `DROP TABLE`. Trên D1, `PRAGMA foreign_keys=OFF` không có tác dụng, nên việc này có thể xoá dây chuyền dữ liệu ở bảng con (như `customer_notes`). Hãy đọc kỹ file SQL vừa sinh và thay bằng `ALTER TABLE ... ADD COLUMN` kèm `CHECK` ở mức cột, như `migrations/0007_customer_tier_employee_salary.sql`.
+
 ## API
 
 Mọi phản hồi có dạng `{ "success": true, "data": ... }` hoặc `{ "success": false, "error": { "code", "message", "fields" } }`. Danh sách nhận `page`, `pageSize`, `search`, `sort`, `dir` và trả về `items`, `pagination`.
@@ -56,7 +58,7 @@ Mọi phản hồi có dạng `{ "success": true, "data": ... }` hoặc `{ "succ
 | Kho | `/api/inventory/balances`, `/api/inventory/transactions`, `POST /api/inventory/import`, `/export`, `/adjust` |
 | Xử lý phiếu | `POST /api/inventory/transactions/:id/confirm`, `/cancel`, `/reverse` |
 | Tổng quan | `/api/dashboard/summary`, `/api/dashboard/charts` |
-| Báo cáo | `/api/reports/employees`, `/customers`, `/products`, `/inventory`, thêm `/export` để lấy CSV |
+| Báo cáo | `/api/reports/employees`, `/customers`, `/products`, `/inventory`, thêm `/export` để tải file Excel (.xlsx) |
 | Cài đặt | `GET` và `PUT /api/settings` |
 
 ## Triển khai lên Cloudflare
@@ -100,7 +102,28 @@ npx wrangler d1 create mini-business-manager
 
 Chạy lại `admin:create:remote` sẽ đặt lại mật khẩu quản trị và đăng xuất mọi thiết bị, nên đây cũng là cách khôi phục khi quên mật khẩu.
 
-Sau lần deploy đầu, hãy thử đăng nhập, đổi mật khẩu và xuất một tệp CSV lớn để xác nhận các thao tác này nằm trong giới hạn CPU của gói Free.
+Sau lần deploy đầu, hãy thử đăng nhập, đổi mật khẩu và xuất một file Excel lớn để xác nhận các thao tác này nằm trong giới hạn CPU của gói Free.
+
+## Xuất Excel
+
+Mọi nút **Xuất Excel** (danh sách nhân viên, khách hàng, sản phẩm, phiếu kho và các báo cáo) tải về file `.xlsx` theo bộ lọc đang chọn, tối đa 2.000 dòng:
+
+- Tiền và số lượng là số thật (định dạng `1.250.000`), cộng trừ được ngay; ngày là ngày thật nên sắp xếp, lọc theo ngày được.
+- Mã, số điện thoại, mã số thuế giữ nguyên số 0 ở đầu.
+- Dòng tiêu đề in đậm, cố định khi cuộn và có sẵn nút lọc; độ rộng cột tự vừa nội dung.
+
+File được tạo trong Worker bằng bộ ghi tự viết (`src/worker/lib/xlsx.ts`, không nén, không thư viện ngoài) để giữ CPU thấp: khoảng 1 ms cho 200 dòng và khoảng 9 ms cho 2.000 dòng × 14 cột (đo trên máy phát triển).
+
+## Phiếu xuất kho bán hàng (PDF)
+
+Mở một phiếu xuất kho đã xác nhận, giao cho khách hàng và chưa bị đảo ngược, rồi bấm **In phiếu xuất kho (PDF)**. File `phieu-xuat-kho-<mã phiếu>.pdf` (một trang A4, theo mẫu chứng từ kế toán) gồm:
+
+- Tên, địa chỉ, điện thoại, MST công ty (lấy từ Cài đặt, kể cả logo); tiêu đề, ngày, số phiếu.
+- Người mua, tên khách hàng, địa chỉ, điện thoại, MST, diễn giải, nhân viên bán hàng (để trống, ghi tay); Nợ 131 / Có 5111 / Loại tiền VND.
+- Bảng hàng hoá (tối thiểu 15 dòng, dòng thừa để trống), dòng Cộng, Cộng tiền hàng, số tiền viết bằng chữ (dạng "... ngàn đồng chẵn").
+- Số chứng từ gốc kèm theo (lấy từ ô Tham chiếu của phiếu) và chỗ ký của Người mua hàng, Kế toán trưởng, Giám đốc.
+
+PDF được tạo ngay trên trình duyệt bằng `pdfmake` (font Roboto có đủ tiếng Việt), nên không tốn CPU của Worker; thư viện chỉ được tải khi bấm nút. Phiếu xuất cho nhân viên và phiếu đã đảo ngược không in được vì không phải doanh thu. Đây là chứng từ nội bộ, không thay thế hoá đơn điện tử (GTGT) theo quy định.
 
 ## Sao lưu và phục hồi
 
@@ -136,7 +159,7 @@ Theo tài liệu Cloudflare, kiểm tra ngày 18/11/2026. Hãy xem lại trướ
 | Dung lượng một database | 500 MB |
 | File tĩnh | Không giới hạn request, không gọi Worker |
 
-Để nằm trong các giới hạn này: mỗi phiếu kho có tối đa 50 dòng, mỗi tệp CSV tối đa 2.000 dòng, khoảng ngày thống kê tối đa 366 ngày, ảnh được thu nhỏ trong trình duyệt và biểu đồ chỉ tải khi cần.
+Để nằm trong các giới hạn này: mỗi phiếu kho có tối đa 50 dòng, mỗi file Excel tối đa 2.000 dòng, khoảng ngày thống kê tối đa 366 ngày, ảnh được thu nhỏ trong trình duyệt và biểu đồ chỉ tải khi cần.
 
 ## Bảo mật
 
@@ -145,7 +168,7 @@ Theo tài liệu Cloudflare, kiểm tra ngày 18/11/2026. Hãy xem lại trướ
 - Phiên đăng nhập dùng cookie `HttpOnly`, `SameSite=Strict`, thêm `Secure` và tiền tố `__Host-` trên production. Database chỉ lưu mã băm của token.
 - Mọi API đều yêu cầu đăng nhập, trừ `/api/health` và `/api/auth/login`. Request thay đổi dữ liệu phải có `Origin` đúng tên miền.
 - Đăng nhập giới hạn 5 lần mỗi 15 phút theo IP và 20 lần theo tài khoản.
-- Toàn bộ dữ liệu vào được kiểm tra ở backend, truy vấn dùng tham số ràng buộc, và ô CSV được chống chèn công thức.
+- Toàn bộ dữ liệu vào được kiểm tra ở backend, truy vấn dùng tham số ràng buộc, và file Excel ghi mọi ô chữ dưới dạng văn bản nên không chạy được công thức chèn vào.
 
 ## Quy tắc tồn kho
 

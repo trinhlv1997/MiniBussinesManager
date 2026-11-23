@@ -1,12 +1,14 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import {
+  CUSTOMER_TIER_LABELS,
   CUSTOMER_TYPE_LABELS,
   EMPLOYEE_STATUS_LABELS,
   PRODUCT_STATUS_LABELS,
   STOCK_STATUS_LABELS,
   TRANSACTION_STATUS_LABELS,
   TRANSACTION_TYPE_LABELS,
+  type CustomerTier,
   type CustomerType,
   type EmployeeStatus,
   type ProductStatus,
@@ -47,6 +49,12 @@ export const EmployeeStatusBadge = ({ status }: { status: EmployeeStatus }) => (
 );
 export const CustomerTypeBadge = ({ type }: { type: CustomerType }) => (
   <StatusBadge tone={type === "business" ? "info" : "neutral"}>{CUSTOMER_TYPE_LABELS[type]}</StatusBadge>
+);
+export const CustomerTierBadge = ({ tier }: { tier: CustomerTier }) => (
+  <StatusBadge tone={tier === "vip" ? "warning" : "neutral"}>
+    {tier === "vip" ? "★ " : ""}
+    {CUSTOMER_TIER_LABELS[tier]}
+  </StatusBadge>
 );
 export const ProductStatusBadge = ({ status }: { status: ProductStatus }) => (
   <StatusBadge tone={status === "active" ? "success" : "neutral"}>{PRODUCT_STATUS_LABELS[status]}</StatusBadge>

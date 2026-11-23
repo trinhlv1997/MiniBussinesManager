@@ -1,12 +1,12 @@
 import { and, asc, count, desc, eq, getTableColumns, gte, isNull, lt } from "drizzle-orm";
 import { formatDateTime, vnDayEndUtc, vnDayStartUtc } from "@shared/format";
-import { CUSTOMER_TYPE_LABELS } from "@shared/labels";
+import { CUSTOMER_TIER_LABELS, CUSTOMER_TYPE_LABELS } from "@shared/labels";
 import { toSearchText } from "@shared/text";
 import type { Customer, CustomerDetail, CustomerNote } from "@shared/types";
 import type { CustomerInput, CustomerListQuery } from "@shared/validation/entities";
 import type { Db } from "../../db/client";
 import { customerNotes, customers } from "../../db/schema";
-import type { CsvColumn } from "../lib/csv";
+import type { ExportColumn } from "../lib/export";
 import {
   LAST_INSERT_ID,
   auditQuery,
@@ -33,11 +33,12 @@ const SORT_COLUMNS = {
   code: customers.code,
   name: customers.name,
   type: customers.type,
+  tier: customers.tier,
   createdAt: customers.createdAt,
 };
 
 const searchTextOf = (input: CustomerInput, code: string) =>
-  toSearchText(code, input.name, input.contactName, input.phone, input.email, input.taxCode);
+  toSearchText(code, input.name, input.contactName, input.phone, input.email, input.taxCode, input.address);
 
 function rethrow(error: unknown): never {
   if (dbErrorText(error).includes("UNIQUE constraint failed")) {
@@ -50,6 +51,7 @@ export async function listCustomers(db: Db, query: CustomerListQuery) {
   const where = and(
     isNull(customers.deletedAt),
     query.type ? eq(customers.type, query.type) : undefined,
+    query.tier ? eq(customers.tier, query.tier) : undefined,
     query.search ? matchSearch(customers.searchText, query.search) : undefined,
     query.createdFrom ? gte(customers.createdAt, vnDayStartUtc(query.createdFrom)) : undefined,
     query.createdTo ? lt(customers.createdAt, vnDayEndUtc(query.createdTo)) : undefined,
@@ -155,10 +157,11 @@ export async function deleteCustomerNote(db: Db, actorId: number, customerId: nu
   ]);
 }
 
-export const CUSTOMER_CSV: CsvColumn<Customer>[] = [
+export const CUSTOMER_EXPORT: ExportColumn<Customer>[] = [
   { header: "Mã khách hàng", value: (row) => row.code },
   { header: "Tên khách hàng", value: (row) => row.name },
   { header: "Loại khách hàng", value: (row) => CUSTOMER_TYPE_LABELS[row.type] },
+  { header: "Hạng khách hàng", value: (row) => CUSTOMER_TIER_LABELS[row.tier] },
   { header: "Người liên hệ", value: (row) => row.contactName },
   { header: "Số điện thoại", value: (row) => row.phone },
   { header: "Email", value: (row) => row.email },

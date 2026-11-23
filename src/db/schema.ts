@@ -80,6 +80,8 @@ export const employees = sqliteTable(
       .notNull()
       .default("active"),
     address: text("address"),
+    /** Monthly base salary in whole VND; NULL when not entered. */
+    baseSalary: integer("base_salary"),
     note: text("note"),
     /** Small resized image as a data URL; the MVP does not use R2. */
     avatar: text("avatar"),
@@ -93,6 +95,7 @@ export const employees = sqliteTable(
     index("employees_status_idx").on(t.status, t.deletedAt),
     index("employees_name_idx").on(t.fullName),
     check("employees_status_check", sql`${t.status} IN ('active', 'on_leave', 'resigned')`),
+    check("employees_base_salary_check", sql`${t.baseSalary} IS NULL OR ${t.baseSalary} >= 0`),
   ],
 );
 
@@ -103,6 +106,8 @@ export const customers = sqliteTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     type: text("type", { enum: ["individual", "business"] }).notNull(),
+    /** Priority for customer care: 'normal' or 'vip'. */
+    tier: text("tier", { enum: ["normal", "vip"] }).notNull().default("normal"),
     contactName: text("contact_name"),
     phone: text("phone"),
     email: text("email"),
@@ -117,9 +122,11 @@ export const customers = sqliteTable(
   (t) => [
     uniqueIndex("customers_code_unique").on(t.code).where(sql`${t.deletedAt} IS NULL`),
     index("customers_type_idx").on(t.type, t.deletedAt),
+    index("customers_tier_idx").on(t.tier, t.deletedAt),
     index("customers_created_idx").on(t.createdAt),
     index("customers_name_idx").on(t.name),
     check("customers_type_check", sql`${t.type} IN ('individual', 'business')`),
+    check("customers_tier_check", sql`${t.tier} IN ('normal', 'vip')`),
   ],
 );
 

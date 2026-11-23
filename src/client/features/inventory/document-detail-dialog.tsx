@@ -1,4 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { FileDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -11,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
+import { useSettings } from "@/features/settings/use-settings";
 import { apiRequest } from "@/lib/api";
 import { refreshAfterChange, useResourceDetail } from "@/lib/resource";
 import { DocumentFormDialog, type DocumentKind } from "./document-form-dialog";
+import { canExportInvoice, downloadInvoicePdf } from "./invoice-pdf";
 
 const BASE = "/inventory/transactions";
 
@@ -27,6 +30,21 @@ function RecipientLink({ document }: { document: InventoryTransactionDetail }) {
     >
       {document.recipientCode} · {document.recipientName}
     </Link>
+  );
+}
+
+function InvoiceButton({ document }: { document: InventoryTransactionDetail }) {
+  const settings = useSettings();
+  const download = useMutation({
+    mutationFn: () => downloadInvoicePdf(document, settings.data!),
+    onSuccess: () => toast.success(`Đã tạo phiếu xuất kho bán hàng ${document.code}`),
+    onError: (failure) => toast.error(failure.message || "Không tạo được phiếu PDF"),
+  });
+  return (
+    <Button variant="outline" disabled={!settings.data || download.isPending} onClick={() => download.mutate()}>
+      <FileDown aria-hidden />
+      {download.isPending ? "Đang tạo PDF..." : "In phiếu xuất kho (PDF)"}
+    </Button>
   );
 }
 
@@ -71,6 +89,7 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
 
   const isDraft = data?.status === "draft";
   const canReverse = data?.status === "confirmed" && data.type !== "reversal" && !data.reversedBy;
+  const canInvoice = data ? canExportInvoice(data) : false;
 
   return (
     <>
@@ -80,8 +99,9 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
         onClose={onClose}
         title={data ? `Phiếu ${data.code}` : "Chi tiết phiếu kho"}
         footer={
-          data && (isDraft || canReverse) ? (
+          data && (isDraft || canReverse || canInvoice) ? (
             <>
+              {canInvoice && <InvoiceButton document={data} />}
               {isDraft && (
                 <>
                   <Button variant="outline" onClick={() => setPanel("cancel")}>Hủy phiếu</Button>

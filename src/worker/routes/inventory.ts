@@ -9,11 +9,11 @@ import {
 } from "@shared/validation/inventory";
 import { createDb } from "../../db/client";
 import type { AppEnv } from "../env";
-import { MAX_EXPORT_ROWS, csvResponse } from "../lib/csv";
+import { MAX_EXPORT_ROWS, excelResponse } from "../lib/export";
 import { ok, parseJson } from "../lib/http";
 import { parseId, parseQuery } from "../lib/resource-routes";
 import {
-  TRANSACTION_CSV,
+  TRANSACTION_EXPORT,
   cancelTransaction,
   confirmTransaction,
   createDocument,
@@ -37,7 +37,13 @@ export const inventoryRoutes = new Hono<AppEnv>()
   .get("/transactions/export", async (c) => {
     const query = { ...parseQuery(c, transactionListQuery), page: 1, pageSize: MAX_EXPORT_ROWS };
     const { items, pagination } = await listTransactions(createDb(c.env.DB), query);
-    return csvResponse(c, "phieu-kho", TRANSACTION_CSV, items, pagination.total);
+    return excelResponse(c, {
+      fileName: "phieu-kho",
+      sheetName: "Phiếu kho",
+      columns: TRANSACTION_EXPORT,
+      rows: items,
+      total: pagination.total,
+    });
   })
   .get("/transactions/:id{[0-9]+}", async (c) =>
     ok(c, await getTransaction(createDb(c.env.DB), parseId(c))),

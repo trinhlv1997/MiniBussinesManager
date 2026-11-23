@@ -10,7 +10,7 @@ import {
   productCategories,
   products,
 } from "../../db/schema";
-import type { CsvColumn } from "../lib/csv";
+import type { ExportColumn } from "../lib/export";
 import {
   LAST_INSERT_ID,
   auditQuery,
@@ -249,7 +249,7 @@ export async function deleteCategory(db: Db, actorId: number, id: number) {
   ]);
 }
 
-export const PRODUCT_CSV: CsvColumn<Product>[] = [
+export const PRODUCT_EXPORT: ExportColumn<Product>[] = [
   { header: "Mã SKU", value: (row) => row.sku },
   { header: "Tên sản phẩm", value: (row) => row.name },
   { header: "Danh mục", value: (row) => row.categoryName },

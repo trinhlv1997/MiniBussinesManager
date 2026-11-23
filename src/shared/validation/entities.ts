@@ -1,5 +1,6 @@
 import { z } from "zod";
 import {
+  CUSTOMER_TIERS,
   CUSTOMER_TYPES,
   EMPLOYEE_STATUSES,
   PRODUCT_STATUSES,
@@ -13,6 +14,7 @@ import {
   optionalDate,
   optionalEmail,
   optionalImage,
+  optionalMoney,
   optionalPhone,
   optionalText,
   pageQuery,
@@ -32,6 +34,7 @@ export const employeeSchema = z.object({
   hireDate: optionalDate,
   status: z.enum(EMPLOYEE_STATUSES, "Trạng thái không hợp lệ"),
   address: optionalText(300),
+  baseSalary: optionalMoney,
   note: optionalText(2000),
   avatar: optionalImage,
 });
@@ -39,13 +42,14 @@ export const employeeSchema = z.object({
 export const employeeListQuery = z.object({
   ...pageQuery,
   status: queryEnum(EMPLOYEE_STATUSES),
-  sort: sortQuery(["code", "fullName", "hireDate", "status", "createdAt"], "createdAt"),
+  sort: sortQuery(["code", "fullName", "hireDate", "status", "baseSalary", "createdAt"], "createdAt"),
 });
 
 export const customerSchema = z.object({
   code: optionalCode,
   name: requiredText("tên khách hàng", 200),
   type: z.enum(CUSTOMER_TYPES, "Loại khách hàng không hợp lệ"),
+  tier: z.enum(CUSTOMER_TIERS, "Hạng khách hàng không hợp lệ").default("normal"),
   contactName: optionalText(120),
   phone: optionalPhone,
   email: optionalEmail,
@@ -66,9 +70,10 @@ export const customerNoteSchema = z.object({ content: requiredText("nội dung g
 export const customerListQuery = z.object({
   ...pageQuery,
   type: queryEnum(CUSTOMER_TYPES),
+  tier: queryEnum(CUSTOMER_TIERS),
   createdFrom: queryDate,
   createdTo: queryDate,
-  sort: sortQuery(["code", "name", "type", "createdAt"], "createdAt"),
+  sort: sortQuery(["code", "name", "type", "tier", "createdAt"], "createdAt"),
 });
 
 export const categorySchema = z.object({

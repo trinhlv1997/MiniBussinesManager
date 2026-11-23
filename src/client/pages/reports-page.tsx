@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { ArrowDownToLine, ArrowUpFromLine, Boxes, CircleOff, Coins, Package, TriangleAlert, UserCheck, UserMinus, UserPlus, Users, Building2, UserRound } from "lucide-react";
+import { ArrowDownToLine, ArrowUpFromLine, Boxes, CircleOff, Coins, Package, Star, TriangleAlert, UserCheck, UserMinus, UserPlus, Users, Building2, UserRound, Wallet } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { formatDate, formatNumber, formatVnd } from "@shared/format";
 import { TRANSACTION_TYPE_LABELS } from "@shared/labels";
@@ -46,8 +46,8 @@ function ReportBody<T>({
   return <div className="space-y-4">{children(report.data)}</div>;
 }
 
-const StatGrid = ({ children }: { children: ReactNode }) => (
-  <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">{children}</div>
+const StatGrid = ({ children, wide }: { children: ReactNode; wide?: boolean }) => (
+  <div className={`grid grid-cols-2 gap-3 ${wide ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>{children}</div>
 );
 
 function EmployeesReportTab() {
@@ -63,11 +63,17 @@ function EmployeesReportTab() {
       <ReportBody report={report}>
         {(data) => (
           <>
-            <StatGrid>
+            <StatGrid wide>
               <StatCard label="Tổng nhân viên" icon={Users} value={formatNumber(data.total)} />
               <StatCard label="Đang làm việc" icon={UserCheck} value={formatNumber(data.active)} />
               <StatCard label="Tạm nghỉ" icon={UserMinus} value={formatNumber(data.onLeave)} />
               <StatCard label="Đã nghỉ việc" icon={UserMinus} value={formatNumber(data.resigned)} />
+              <StatCard
+                label="Quỹ lương cơ bản"
+                icon={Wallet}
+                value={formatVnd(data.activePayroll)}
+                note="Tổng lương cơ bản/tháng của nhân viên đang làm việc"
+              />
             </StatGrid>
             <ChartCard title="Nhân viên vào làm theo thời gian">
               <CountChart data={data.hires} name="Nhân viên mới" />
@@ -92,10 +98,11 @@ function CustomersReportTab() {
       <ReportBody report={report}>
         {(data) => (
           <>
-            <StatGrid>
+            <StatGrid wide>
               <StatCard label="Tổng khách hàng" icon={Users} value={formatNumber(data.total)} />
               <StatCard label="Khách hàng cá nhân" icon={UserRound} value={formatNumber(data.individual)} />
               <StatCard label="Khách hàng doanh nghiệp" icon={Building2} value={formatNumber(data.business)} />
+              <StatCard label="Khách hàng VIP" icon={Star} value={formatNumber(data.vip)} />
               <StatCard label="Khách hàng mới" icon={UserPlus} value={formatNumber(data.newInRange)} note="Trong khoảng đã chọn" />
             </StatGrid>
             <ChartCard title="Khách hàng mới theo thời gian">

@@ -4,7 +4,7 @@ import type { Paginated } from "@shared/api";
 import { idParam } from "@shared/validation/common";
 import { createDb, type Db } from "../../db/client";
 import type { AppEnv } from "../env";
-import { MAX_EXPORT_ROWS, csvResponse, type CsvColumn } from "./csv";
+import { MAX_EXPORT_ROWS, excelResponse, type ExportColumn } from "./export";
 import { validationError } from "./errors";
 import { ok, parseJson } from "./http";
 import { notFound } from "./db";
@@ -27,7 +27,9 @@ export type ResourceConfig<Row, Query extends PagedQuery, Input> = {
   querySchema: z.ZodType<Query, Record<string, unknown>>;
   bodySchema: z.ZodType<Input, unknown>;
   exportName: string;
-  columns: CsvColumn<Row>[];
+  /** Tên sheet trong file Excel, ví dụ "Nhân viên". */
+  sheetName: string;
+  columns: ExportColumn<Row>[];
   list: (db: Db, query: Query) => Promise<Paginated<Row>>;
   get: (db: Db, id: number) => Promise<unknown>;
   create: (db: Db, actorId: number, input: Input) => Promise<unknown>;
@@ -46,7 +48,13 @@ export function resourceRoutes<Row, Query extends PagedQuery, Input>(
     .get("/export", async (c) => {
       const query = { ...parseQuery(c, config.querySchema), page: 1, pageSize: MAX_EXPORT_ROWS };
       const { items, pagination } = await config.list(createDb(c.env.DB), query);
-      return csvResponse(c, config.exportName, config.columns, items, pagination.total);
+      return excelResponse(c, {
+        fileName: config.exportName,
+        sheetName: config.sheetName,
+        columns: config.columns,
+        rows: items,
+        total: pagination.total,
+      });
     })
     .get("/:id{[0-9]+}", async (c) => ok(c, await config.get(createDb(c.env.DB), parseId(c))))
     .post("/", async (c) => {

@@ -1,6 +1,6 @@
 import { Plus, UserRound } from "lucide-react";
 import { formatDate } from "@shared/format";
-import { CUSTOMER_TYPE_LABELS } from "@shared/labels";
+import { CUSTOMER_TIER_LABELS, CUSTOMER_TYPE_LABELS } from "@shared/labels";
 import type { Customer } from "@shared/types";
 import { DataTable, type Column } from "@/components/common/data-table";
 import { DatePicker } from "@/components/common/date-picker";
@@ -14,7 +14,7 @@ import {
   optionsFrom,
 } from "@/components/common/list-controls";
 import { PageHeader } from "@/components/common/page-header";
-import { CustomerTypeBadge } from "@/components/common/status";
+import { CustomerTierBadge, CustomerTypeBadge } from "@/components/common/status";
 import { Button } from "@/components/ui/button";
 import {
   CUSTOMERS,
@@ -35,8 +35,20 @@ export default function CustomersPage() {
     { key: "code", header: "Mã", sortKey: "code", cell: (row) => <span className="font-medium">{row.code}</span> },
     { key: "name", header: "Tên khách hàng", sortKey: "name", cell: (row) => row.name },
     { key: "type", header: "Loại", sortKey: "type", cell: (row) => <CustomerTypeBadge type={row.type} /> },
+    // Sắp xếp giảm dần theo hạng đưa khách VIP lên đầu ('vip' > 'normal').
+    { key: "tier", header: "Hạng", sortKey: "tier", cell: (row) => <CustomerTierBadge tier={row.tier} /> },
     { key: "contact", header: "Người liên hệ", className: "hidden lg:table-cell", cell: (row) => row.contactName ?? "—" },
     { key: "phone", header: "Số điện thoại", className: "hidden md:table-cell", cell: (row) => row.phone ?? "—" },
+    {
+      key: "address",
+      header: "Địa chỉ",
+      className: "hidden xl:table-cell max-w-56",
+      cell: (row) => (
+        <span className="line-clamp-2 whitespace-normal" title={row.address ?? undefined}>
+          {row.address ?? "—"}
+        </span>
+      ),
+    },
     {
       key: "createdAt",
       header: "Ngày tạo",
@@ -62,6 +74,7 @@ export default function CustomersPage() {
   const filters = {
     search: params.get("search"),
     type: params.get("type"),
+    tier: params.get("tier"),
     createdFrom: params.get("createdFrom"),
     createdTo: params.get("createdTo"),
   };
@@ -83,7 +96,7 @@ export default function CustomersPage() {
       />
       <Toolbar>
         <SearchInput
-          placeholder="Tìm theo tên, mã, số điện thoại"
+          placeholder="Tìm theo tên, mã, SĐT, địa chỉ"
           value={filters.search}
           onChange={(search) => params.update({ search })}
         />
@@ -93,6 +106,13 @@ export default function CustomersPage() {
           value={filters.type}
           options={optionsFrom(CUSTOMER_TYPE_LABELS)}
           onChange={(type) => params.update({ type })}
+        />
+        <FilterSelect
+          label="Lọc theo hạng khách hàng"
+          allLabel="Tất cả hạng"
+          value={filters.tier}
+          options={optionsFrom(CUSTOMER_TIER_LABELS)}
+          onChange={(tier) => params.update({ tier })}
         />
         <div className="w-40">
           <DatePicker

@@ -1,4 +1,4 @@
-import { Download, Eye, MoreHorizontal, Pencil, Search, Trash2 } from "lucide-react";
+import { Eye, FileSpreadsheet, MoreHorizontal, Pencil, Search, Trash2 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { downloadCsv } from "@/lib/download";
+import { downloadExcel } from "@/lib/download";
 
 const ALL = "__all__";
 
@@ -93,9 +93,9 @@ export function ExportButton({ path, fileName }: { path: string; fileName: strin
       onClick={async () => {
         setBusy(true);
         try {
-          const { truncated } = await downloadCsv(path, fileName);
+          const { truncated } = await downloadExcel(path, fileName);
           if (truncated) toast.warning("Tệp chỉ gồm 2.000 dòng đầu. Hãy lọc hẹp hơn để xuất đủ dữ liệu.");
-          else toast.success("Đã xuất tệp CSV");
+          else toast.success("Đã xuất tệp Excel");
         } catch (error) {
           toast.error(error instanceof Error ? error.message : "Không thể xuất dữ liệu");
         } finally {
@@ -103,8 +103,8 @@ export function ExportButton({ path, fileName }: { path: string; fileName: strin
         }
       }}
     >
-      <Download aria-hidden />
-      {busy ? "Đang xuất…" : "Xuất CSV"}
+      <FileSpreadsheet aria-hidden />
+      {busy ? "Đang xuất…" : "Xuất Excel"}
     </Button>
   );
 }

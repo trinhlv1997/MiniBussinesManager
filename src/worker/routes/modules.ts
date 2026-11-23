@@ -15,7 +15,7 @@ import type { AppEnv } from "../env";
 import { ok, parseJson } from "../lib/http";
 import { parseId, resourceRoutes } from "../lib/resource-routes";
 import {
-  CUSTOMER_CSV,
+  CUSTOMER_EXPORT,
   addCustomerNote,
   createCustomer,
   deleteCustomer,
@@ -25,7 +25,7 @@ import {
   updateCustomer,
 } from "../services/customers";
 import {
-  EMPLOYEE_CSV,
+  EMPLOYEE_EXPORT,
   createEmployee,
   deleteEmployee,
   getEmployee,
@@ -33,7 +33,7 @@ import {
   updateEmployee,
 } from "../services/employees";
 import {
-  PRODUCT_CSV,
+  PRODUCT_EXPORT,
   createCategory,
   createProduct,
   deleteCategory,
@@ -50,7 +50,8 @@ export const employeeRoutes = resourceRoutes({
   querySchema: employeeListQuery,
   bodySchema: employeeSchema,
   exportName: "nhan-vien",
-  columns: EMPLOYEE_CSV,
+  sheetName: "Nhân viên",
+  columns: EMPLOYEE_EXPORT,
   list: listEmployees,
   get: getEmployee,
   create: createEmployee,
@@ -62,7 +63,8 @@ export const customerRoutes = resourceRoutes({
   querySchema: customerListQuery,
   bodySchema: customerSchema,
   exportName: "khach-hang",
-  columns: CUSTOMER_CSV,
+  sheetName: "Khách hàng",
+  columns: CUSTOMER_EXPORT,
   list: listCustomers,
   get: getCustomer,
   create: createCustomer,
@@ -83,7 +85,8 @@ export const productRoutes = resourceRoutes({
   querySchema: productListQuery,
   bodySchema: productSchema,
   exportName: "san-pham",
-  columns: PRODUCT_CSV,
+  sheetName: "Sản phẩm",
+  columns: PRODUCT_EXPORT,
   list: listProducts,
   get: getProduct,
   create: createProduct,

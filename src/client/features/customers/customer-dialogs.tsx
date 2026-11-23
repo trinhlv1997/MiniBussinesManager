@@ -5,7 +5,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { formatDateTime } from "@shared/format";
-import { CUSTOMER_TYPE_LABELS } from "@shared/labels";
+import { CUSTOMER_TIER_LABELS, CUSTOMER_TYPE_LABELS } from "@shared/labels";
 import type { Customer, CustomerDetail } from "@shared/types";
 import {
   customerSchema,
@@ -17,7 +17,7 @@ import { SelectField, TextareaField } from "@/components/common/form-controls";
 import { FormField } from "@/components/common/form-field";
 import { optionsFrom } from "@/components/common/list-controls";
 import { ErrorState, PageSkeleton } from "@/components/common/states";
-import { CustomerTypeBadge } from "@/components/common/status";
+import { CustomerTierBadge, CustomerTypeBadge } from "@/components/common/status";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { RecipientDocuments } from "@/features/inventory/recipient-documents";
@@ -34,6 +34,7 @@ export function CustomerFormDialog({ customer, onClose }: { customer?: Customer;
       code: customer?.code ?? "",
       name: customer?.name ?? "",
       type: customer?.type ?? "individual",
+      tier: customer?.tier ?? "normal",
       contactName: customer?.contactName ?? "",
       phone: customer?.phone ?? "",
       email: customer?.email ?? "",
@@ -64,6 +65,13 @@ export function CustomerFormDialog({ customer, onClose }: { customer?: Customer;
         <FormField label="Tên khách hàng" error={errors.name} {...form.register("name")} />
         <FormField label="Mã khách hàng" placeholder="Để trống để tự tạo" error={errors.code} {...form.register("code")} />
         <SelectField control={form.control} name="type" label="Loại khách hàng" options={optionsFrom(CUSTOMER_TYPE_LABELS)} />
+        <SelectField
+          control={form.control}
+          name="tier"
+          label="Hạng khách hàng"
+          hint="VIP được ưu tiên chăm sóc"
+          options={optionsFrom(CUSTOMER_TIER_LABELS)}
+        />
         <FormField label="Người liên hệ" error={errors.contactName} {...form.register("contactName")} />
         <FormField label="Số điện thoại" inputMode="tel" error={errors.phone} {...form.register("phone")} />
         <FormField label="Email" type="email" error={errors.email} {...form.register("email")} />
@@ -148,6 +156,7 @@ export function CustomerDetailDialog({ id, onClose }: { id: number; onClose: () 
             items={[
               ["Mã khách hàng", data.code],
               ["Loại khách hàng", <CustomerTypeBadge key="type" type={data.type} />],
+              ["Hạng khách hàng", <CustomerTierBadge key="tier" tier={data.tier} />],
               ["Người liên hệ", data.contactName],
               ["Số điện thoại", data.phone],
               ["Email", data.email],

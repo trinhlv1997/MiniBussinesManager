@@ -47,6 +47,12 @@ const CUSTOMERS = [
   ["Công ty TNHH Giải pháp Mạng Việt", "business", "Cao Minh Tuấn", "02437831166", "Hà Nội", "0104234561"],
 ] as const;
 
+/** Lương cơ bản/tháng (VND), cùng thứ tự với EMPLOYEES. */
+const BASE_SALARIES = [35_000_000, 22_000_000, 20_000_000, 12_000_000, 10_000_000, 11_000_000, 7_500_000, 8_500_000, 14_000_000, 9_000_000];
+
+/** Mã khách hàng hạng VIP (khách doanh nghiệp mua nhiều trong dữ liệu mẫu). */
+const VIP_CUSTOMERS = new Set(["KH0001", "KH0004", "KH0007", "KH0013"]);
+
 const CATEGORIES = [
   ["Thiết bị đóng cắt", "Aptomat, cầu dao, contactor và tủ điện"],
   ["Dây và cáp điện", "Dây điện, cáp mạng và phụ kiện đi dây"],
@@ -195,21 +201,22 @@ export function buildDemoSql(today: string): string {
   const statements = [
     insert(
       "employees",
-      ["id", "code", "full_name", "phone", "email", "position", "hire_date", "status", "address", "search_text"],
+      ["id", "code", "full_name", "phone", "email", "position", "hire_date", "status", "address", "base_salary", "search_text"],
       EMPLOYEES.map(([name, phone, position, hireDate, status, address], index) => {
         const code = `NV${pad(index + 1)}`;
         const email = `nv${pad(index + 1)}@anphat.example`;
-        return [index + 1, code, name, phone, email, position, hireDate, status, address, toSearchText(code, name, phone, email, position)];
+        return [index + 1, code, name, phone, email, position, hireDate, status, address, BASE_SALARIES[index] ?? null, toSearchText(code, name, phone, email, position, address)];
       }),
     ),
     insert(
       "customers",
-      ["id", "code", "name", "type", "contact_name", "phone", "email", "address", "tax_code", "search_text", "created_at", "updated_at"],
+      ["id", "code", "name", "type", "tier", "contact_name", "phone", "email", "address", "tax_code", "search_text", "created_at", "updated_at"],
       CUSTOMERS.map(([name, type, contact, phone, address, taxCode], index) => {
         const code = `KH${pad(index + 1)}`;
         const email = `kh${pad(index + 1)}@khachhang.example`;
         const createdAt = vnDayStartUtc(addDays(today, -(80 - index * 4)));
-        return [index + 1, code, name, type, contact, phone, email, address, taxCode, toSearchText(code, name, contact, phone, email, taxCode), createdAt, createdAt];
+        const tier = VIP_CUSTOMERS.has(code) ? "vip" : "normal";
+        return [index + 1, code, name, type, tier, contact, phone, email, address, taxCode, toSearchText(code, name, contact, phone, email, taxCode, address), createdAt, createdAt];
       }),
     ),
     insert(
