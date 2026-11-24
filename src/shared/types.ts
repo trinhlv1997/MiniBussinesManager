@@ -1,3 +1,4 @@
+import type { Role } from "./permissions";
 import type {
   CustomerTier,
   CustomerType,
@@ -21,6 +22,8 @@ export type Employee = {
   /** Lương cơ bản hằng tháng, VND nguyên; null khi chưa nhập. */
   baseSalary: number | null;
   note: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -32,12 +35,18 @@ export type Customer = {
   name: string;
   type: CustomerType;
   tier: CustomerTier;
+  /** Nhân viên chăm sóc; mã và tên lấy kèm để hiển thị, null khi chưa phân công. */
+  careEmployeeId: number | null;
+  careEmployeeCode: string | null;
+  careEmployeeName: string | null;
   contactName: string | null;
   phone: string | null;
   email: string | null;
   address: string | null;
   taxCode: string | null;
   note: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -60,7 +69,10 @@ export type Product = {
   categoryName: string;
   unit: string;
   costPrice: number;
+  /** Giá khách lẻ. Giá đại lý / phân phối null = bằng giá lẻ (xem shared/pricing.ts). */
   salePrice: number;
+  dealerPrice: number | null;
+  distributorPrice: number | null;
   quantity: number;
   minStock: number;
   brand: string | null;
@@ -69,6 +81,8 @@ export type Product = {
   description: string | null;
   status: ProductStatus;
   stockStatus: StockStatus;
+  createdBy: number | null;
+  updatedBy: number | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -89,6 +103,9 @@ export type InventoryTransaction = {
   note: string | null;
   reversalOfId: number | null;
   confirmedAt: string | null;
+  confirmedBy: number | null;
+  createdBy: number | null;
+  updatedBy: number | null;
   createdAt: string;
   lineCount: number;
   totalQuantity: number;
@@ -195,6 +212,8 @@ export type CustomerReport = {
   individual: number;
   business: number;
   vip: number;
+  normal: number;
+  basic: number;
   newInRange: number;
   series: CountPoint[];
 };
@@ -232,4 +251,36 @@ export type InventoryReport = {
   stockValue: number;
   series: StockPoint[];
   history: { items: InventoryHistoryRow[]; total: number; page: number; pageSize: number };
+};
+
+/** Tài khoản đăng nhập (màn hình Người dùng, chỉ Admin). */
+export type UserAccount = {
+  id: number;
+  username: string;
+  displayName: string;
+  role: Role;
+  employeeId: number | null;
+  employeeCode: string | null;
+  employeeName: string | null;
+  active: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+};
+
+/** Tên người dùng để hiển thị "Tạo bởi …" (mọi tài khoản đăng nhập đều xem được). */
+export type UserName = { id: number; displayName: string; active: boolean };
+
+/** Ai tạo / sửa cuối bản ghi; thời gian lấy từ createdAt / updatedAt của bản ghi. */
+export type Authorship = { createdBy: number | null; updatedBy: number | null };
+
+export type AuditEntry = {
+  id: number;
+  createdAt: string;
+  actorId: number | null;
+  actorName: string | null;
+  action: string;
+  entityType: string;
+  entityId: string | null;
+  /** Mã đối tượng (KH0001, PX-000012…) nếu nhật ký có lưu. */
+  entityCode: string | null;
 };

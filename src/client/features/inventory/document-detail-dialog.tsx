@@ -17,6 +17,8 @@ import { apiRequest } from "@/lib/api";
 import { refreshAfterChange, useResourceDetail } from "@/lib/resource";
 import { DocumentFormDialog, type DocumentKind } from "./document-form-dialog";
 import { canExportInvoice, downloadInvoicePdf } from "./invoice-pdf";
+import { RecordHistory } from "@/features/audit/record-history";
+import { useUserNames } from "@/features/users/use-user-names";
 
 const BASE = "/inventory/transactions";
 
@@ -64,6 +66,9 @@ function ReverseForm({ onSubmit, pending }: { onSubmit: (reason: string) => void
 export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const client = useQueryClient();
   const { data, error } = useResourceDetail<InventoryTransactionDetail>("inventory", BASE, id);
+  const nameOf = useUserNames();
+  const byWhom = (userId: number | null, at: string | null) =>
+    at ? [nameOf(userId), formatDateTime(at)].filter(Boolean).join(" · ") : null;
   const [panel, setPanel] = useState<"edit" | "cancel" | "reverse" | null>(null);
 
   const act = useMutation({
@@ -127,7 +132,8 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
                 ["Loại phiếu", <DocumentTypeBadge key="type" type={data.type} />],
                 ["Trạng thái", <DocumentStatusBadge key="status" status={data.status} />],
                 ["Ngày chứng từ", formatDate(data.transactionDate)],
-                ["Thời điểm xác nhận", formatDateTime(data.confirmedAt)],
+                ["Lập phiếu", byWhom(data.createdBy, data.createdAt)],
+                ["Xác nhận", byWhom(data.confirmedBy, data.confirmedAt)],
                 ...(data.type === "export"
                   ? ([["Người nhận", data.recipientCode && <RecipientLink key="recipient" document={data} />]] as [string, ReactNode][])
                   : []),
@@ -175,6 +181,7 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
                 Tổng thành tiền: <span className="font-semibold tabular-nums">{formatVnd(data.totalAmount)}</span>
               </p>
             )}
+            <RecordHistory entityType="inventory_transaction" entityId={data.id} />
             {panel === "reverse" && (
               <ReverseForm
                 pending={act.isPending}

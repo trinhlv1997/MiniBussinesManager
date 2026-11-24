@@ -263,10 +263,85 @@ describe("customer tier", () => {
     const sheet = await readXlsx(await api("/api/customers/export?tier=vip", { cookie }));
     expect(sheet.dataRows).toHaveLength(1);
     expect(sheet.cell(0, "Tên khách hàng")?.value).toBe("Khách VIP");
-    expect(sheet.cell(0, "Hạng khách hàng")?.value).toBe("VIP");
+    expect(sheet.cell(0, "Hạng khách hàng")?.value).toBe("VIP (Nhà phân phối)");
     expect(sheet.cell(0, "Ngày tạo")?.type).toBe("date");
 
     expect(await read(`/api/reports/customers?${range}`)).toMatchObject({ total: 3, vip: 1 });
+  });
+});
+
+describe("customer tiers and care employee", () => {
+  it("accepts the three tiers and labels them by sales channel", async () => {
+    for (const tier of ["vip", "normal", "basic"]) {
+      const row = await created<{ id: number; tier: string }>("/api/customers", { ...customer, name: `Khách ${tier}`, tier });
+      expect(row.tier).toBe(tier);
+    }
+    const sorted = await read<Page<{ tier: string }>>("/api/customers?sort=tier&dir=desc");
+    expect(sorted.items.map((item) => item.tier)).toEqual(["vip", "normal", "basic"]);
+    const sheet = await readXlsx(await api("/api/customers/export?sort=tier&dir=desc", { cookie }));
+    expect(sheet.dataRows.map((_, i) => sheet.cell(i, "Hạng khách hàng")?.value)).toEqual([
+      "VIP (Nhà phân phối)",
+      "Bình thường (Đại lý)",
+      "Cơ bản (Khách lẻ)",
+    ]);
+    expect(await read(`/api/reports/customers?from=${addDays(vnToday(), -6)}&to=${vnToday()}`)).toMatchObject({
+      vip: 1,
+      normal: 1,
+      basic: 1,
+    });
+  });
+
+  it("assigns an optional care employee and shows who it is", async () => {
+    const staff = await created("/api/employees", employee);
+    const assigned = await created<{ id: number; careEmployeeId: number; careEmployeeCode: string; careEmployeeName: string }>(
+      "/api/customers",
+      { ...customer, careEmployeeId: staff.id },
+    );
+    expect(assigned).toMatchObject({ careEmployeeId: staff.id, careEmployeeCode: staff.code, careEmployeeName: "Nguyễn Văn Đức" });
+
+    const unassigned = await created<{ careEmployeeId: number | null; careEmployeeName: string | null }>("/api/customers", {
+      name: "Khách tự đến",
+      type: "individual",
+      careEmployeeId: "",
+    });
+    expect(unassigned).toMatchObject({ careEmployeeId: null, careEmployeeName: null });
+
+    const mine = await read<Page<{ id: number }>>(`/api/customers?careEmployeeId=${staff.id}`);
+    expect(mine.items.map((item) => item.id)).toEqual([assigned.id]);
+    const sheet = await readXlsx(await api(`/api/customers/export?careEmployeeId=${staff.id}`, { cookie }));
+    expect(sheet.cell(0, "Nhân viên chăm sóc")?.value).toBe(`${staff.code} · Nguyễn Văn Đức`);
+
+    // Bỏ phân công khi sửa.
+    const cleared = await send(`/api/customers/${assigned.id}`, "PUT", { ...customer, careEmployeeId: null });
+    expect(cleared.status).toBe(200);
+    expect((await read<{ careEmployeeId: number | null }>(`/api/customers/${assigned.id}`)).careEmployeeId).toBeNull();
+  });
+
+  it("rejects unknown or deleted employees", async () => {
+    const missing = await send("/api/customers", "POST", { ...customer, careEmployeeId: 999 });
+    expect(missing.status).toBe(422);
+    expect(await missing.json()).toMatchObject({ error: { fields: { careEmployeeId: expect.any(String) } } });
+    expect((await send("/api/customers", "POST", { ...customer, careEmployeeId: "abc" })).status).toBe(422);
+
+    const staff = await created("/api/employees", employee);
+    await send(`/api/employees/${staff.id}`, "DELETE");
+    expect((await send("/api/customers", "POST", { ...customer, careEmployeeId: staff.id })).status).toBe(422);
+  });
+
+  it("keeps the customer's own code and name next to the employee's", async () => {
+    const staff = await created("/api/employees", { ...employee, code: "NV-77" });
+    const row = await created<{ code: string; name: string }>("/api/customers", { ...customer, code: "KH-55", careEmployeeId: staff.id });
+    expect(row).toMatchObject({ code: "KH-55", name: customer.name });
+    const list = await read<Page<{ code: string; name: string; careEmployeeCode: string }>>("/api/customers");
+    expect(list.items[0]).toMatchObject({ code: "KH-55", name: customer.name, careEmployeeCode: "NV-77" });
+  });
+
+  it("unassigns customers when their care employee is deleted", async () => {
+    const staff = await created("/api/employees", employee);
+    const row = await created("/api/customers", { ...customer, careEmployeeId: staff.id });
+    expect((await send(`/api/employees/${staff.id}`, "DELETE")).status).toBe(200);
+    const after = await read<{ careEmployeeId: number | null; careEmployeeName: string | null }>(`/api/customers/${row.id}`);
+    expect(after).toMatchObject({ careEmployeeId: null, careEmployeeName: null });
   });
 });
 
@@ -274,6 +349,33 @@ describe("products and categories", () => {
   let categoryId = 0;
   beforeEach(async () => {
     categoryId = (await created("/api/product-categories", { name: "Văn phòng phẩm" })).id;
+  });
+
+  it("stores distributor and dealer prices, blank meaning the retail price", async () => {
+    const priced = await created<{ id: number; salePrice: number; dealerPrice: number | null; distributorPrice: number | null }>(
+      "/api/products",
+      product(categoryId, { dealerPrice: 4500, distributorPrice: 4000 }),
+    );
+    expect(priced).toMatchObject({ salePrice: 5000, dealerPrice: 4500, distributorPrice: 4000 });
+
+    const plain = await created<{ dealerPrice: number | null; distributorPrice: number | null }>(
+      "/api/products",
+      product(categoryId, { name: "Thước kẻ", dealerPrice: null }),
+    );
+    expect(plain).toMatchObject({ dealerPrice: null, distributorPrice: null });
+
+    const bad = await send("/api/products", "POST", product(categoryId, { dealerPrice: -1, distributorPrice: 1.5 }));
+    expect(bad.status).toBe(422);
+    expect(await bad.json()).toMatchObject({ error: { fields: { dealerPrice: expect.any(String), distributorPrice: expect.any(String) } } });
+
+    // Excel luôn có số: giá để trống xuất ra bằng giá lẻ.
+    const sheet = await readXlsx(await api("/api/products/export?sort=name&dir=asc", { cookie }));
+    expect(sheet.headers).toEqual(expect.arrayContaining(["Giá phân phối (VND)", "Giá đại lý (VND)", "Giá khách lẻ (VND)"]));
+    const rowOf = (name: string) => sheet.dataRows.findIndex((_, i) => sheet.cell(i, "Tên sản phẩm")?.value === name);
+    const pen = rowOf("Bút bi Thiên Long");
+    const ruler = rowOf("Thước kẻ");
+    expect([sheet.cell(pen, "Giá phân phối (VND)")?.value, sheet.cell(pen, "Giá đại lý (VND)")?.value]).toEqual(["4000", "4500"]);
+    expect([sheet.cell(ruler, "Giá phân phối (VND)")?.value, sheet.cell(ruler, "Giá đại lý (VND)")?.value]).toEqual(["5000", "5000"]);
   });
 
   it("supports CRUD and a unique SKU", async () => {

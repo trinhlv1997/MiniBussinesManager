@@ -21,11 +21,28 @@ import {
   CustomerDetailDialog,
   CustomerFormDialog,
 } from "@/features/customers/customer-dialogs";
+import { useCan } from "@/features/auth/use-auth";
+import { useEmployeeOptions } from "@/features/employees/use-employee-options";
 import { useEntityDialog } from "@/hooks/use-entity-dialog";
 import { useListParams } from "@/hooks/use-list-params";
 import { toQueryString, useDeleteResource, useResourceList } from "@/lib/resource";
 
+/** Chỉ Admin (có quyền xem danh sách nhân viên) mới lọc theo người chăm sóc. */
+function CareEmployeeFilter({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const { options } = useEmployeeOptions();
+  return (
+    <FilterSelect
+      label="Lọc theo nhân viên chăm sóc"
+      allLabel="Mọi nhân viên chăm sóc"
+      value={value}
+      options={options}
+      onChange={onChange}
+    />
+  );
+}
+
 export default function CustomersPage() {
+  const can = useCan();
   const params = useListParams();
   const dialog = useEntityDialog<Customer>();
   const list = useResourceList<Customer>(CUSTOMERS.key, CUSTOMERS.path, params.values);
@@ -50,10 +67,26 @@ export default function CustomersPage() {
       ),
     },
     {
+      key: "careEmployee",
+      header: "NV chăm sóc",
+      className: "hidden lg:table-cell",
+      cell: (row) => row.careEmployeeName ?? <span className="text-muted-foreground">Chưa phân công</span>,
+    },
+    {
+      key: "note",
+      header: "Ghi chú",
+      className: "hidden xl:table-cell max-w-48",
+      cell: (row) => (
+        <span className="line-clamp-2 whitespace-normal text-muted-foreground" title={row.note ?? undefined}>
+          {row.note ?? "—"}
+        </span>
+      ),
+    },
+    {
       key: "createdAt",
       header: "Ngày tạo",
       sortKey: "createdAt",
-      className: "hidden lg:table-cell",
+      className: "hidden 2xl:table-cell",
       cell: (row) => formatDate(row.createdAt),
     },
     {
@@ -75,6 +108,7 @@ export default function CustomersPage() {
     search: params.get("search"),
     type: params.get("type"),
     tier: params.get("tier"),
+    careEmployeeId: params.get("careEmployeeId"),
     createdFrom: params.get("createdFrom"),
     createdTo: params.get("createdTo"),
   };
@@ -114,6 +148,9 @@ export default function CustomersPage() {
           options={optionsFrom(CUSTOMER_TIER_LABELS)}
           onChange={(tier) => params.update({ tier })}
         />
+        {can("employees") && (
+          <CareEmployeeFilter value={filters.careEmployeeId} onChange={(careEmployeeId) => params.update({ careEmployeeId })} />
+        )}
         <div className="w-40">
           <DatePicker
             label="Tạo từ ngày"

@@ -8,6 +8,7 @@ import {
   text,
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
+import { ROLES } from "../shared/permissions";
 
 /**
  * Conventions
@@ -27,6 +28,16 @@ const timestamps = {
 
 const softDelete = { deletedAt: text("deleted_at") };
 
+/**
+ * Who created / last changed a row (user ids). NULL for rows created before multi-user accounts
+ * when the audit log had no match. Users are never deleted, only deactivated, so names stay available.
+ */
+const userRef = (name: string) => integer(name).references((): AnySQLiteColumn => adminUsers.id, { onDelete: "set null" });
+const authorship = { createdBy: userRef("created_by"), updatedBy: userRef("updated_by") };
+
+
+
+/** Login accounts (table name kept from the single-admin era). Role decides what each account may do. */
 export const adminUsers = sqliteTable(
   "admin_users",
   {
@@ -35,10 +46,19 @@ export const adminUsers = sqliteTable(
     displayName: text("display_name").notNull(),
     passwordHash: text("password_hash").notNull(),
     passwordChangedAt: text("password_changed_at").notNull().default(nowUtc),
+    role: text("role", { enum: ROLES }).notNull().default("admin"),
+    /** Employee profile of this account; customers "picked" for that employee are visible to it. */
+    employeeId: integer("employee_id").references((): AnySQLiteColumn => employees.id, { onDelete: "set null" }),
+    /** Deactivated accounts cannot log in; they are kept so audit history keeps their name. */
+    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    /** Stored here, not derived from audit_logs, because the audit log is only kept for a limited time. */
+    lastLoginAt: text("last_login_at"),
     ...timestamps,
   },
-  // The product has exactly one administrator.
-  (t) => [check("admin_users_single_row", sql`${t.id} = 1`)],
+  (t) => [
+    uniqueIndex("admin_users_employee_unique").on(t.employeeId).where(sql`${t.employeeId} IS NOT NULL`),
+    check("admin_users_role_check", sql`${t.role} IN ('admin', 'employee')`),
+  ],
 );
 
 export const adminSessions = sqliteTable(
@@ -87,6 +107,7 @@ export const employees = sqliteTable(
     avatar: text("avatar"),
     /** Lowercase text without diacritics, so search ignores case and Vietnamese accents. */
     searchText: text("search_text").notNull().default(""),
+    ...authorship,
     ...timestamps,
     ...softDelete,
   },
@@ -106,8 +127,10 @@ export const customers = sqliteTable(
     code: text("code").notNull(),
     name: text("name").notNull(),
     type: text("type", { enum: ["individual", "business"] }).notNull(),
-    /** Priority for customer care: 'normal' or 'vip'. */
-    tier: text("tier", { enum: ["normal", "vip"] }).notNull().default("normal"),
+    /** Customer tier: 'vip' (distributor), 'normal' (dealer) or 'basic' (retail). */
+    tier: text("tier", { enum: ["basic", "normal", "vip"] }).notNull().default("normal"),
+    /** Employee who looks after this customer (optional). Cleared when the employee is deleted. */
+    careEmployeeId: integer("care_employee_id").references(() => employees.id, { onDelete: "set null" }),
     contactName: text("contact_name"),
     phone: text("phone"),
     email: text("email"),
@@ -116,17 +139,20 @@ export const customers = sqliteTable(
     note: text("note"),
     /** Lowercase text without diacritics, so search ignores case and Vietnamese accents. */
     searchText: text("search_text").notNull().default(""),
+    ...authorship,
     ...timestamps,
     ...softDelete,
   },
   (t) => [
+    index("customers_created_by_idx").on(t.createdBy),
     uniqueIndex("customers_code_unique").on(t.code).where(sql`${t.deletedAt} IS NULL`),
     index("customers_type_idx").on(t.type, t.deletedAt),
     index("customers_tier_idx").on(t.tier, t.deletedAt),
+    index("customers_care_employee_idx").on(t.careEmployeeId),
     index("customers_created_idx").on(t.createdAt),
     index("customers_name_idx").on(t.name),
     check("customers_type_check", sql`${t.type} IN ('individual', 'business')`),
-    check("customers_tier_check", sql`${t.tier} IN ('normal', 'vip')`),
+    check("customers_tier_check", sql`${t.tier} IN ('basic', 'normal', 'vip')`),
   ],
 );
 
@@ -138,6 +164,7 @@ export const customerNotes = sqliteTable(
       .notNull()
       .references(() => customers.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
+    createdBy: userRef("created_by"),
     ...timestamps,
   },
   (t) => [index("customer_notes_customer_idx").on(t.customerId, t.createdAt)],
@@ -148,6 +175,7 @@ export const productCategories = sqliteTable("product_categories", {
   code: text("code").notNull().unique(),
   name: text("name").notNull().unique(),
   description: text("description"),
+  ...authorship,
   ...timestamps,
 });
 
@@ -162,7 +190,12 @@ export const products = sqliteTable(
       .references(() => productCategories.id, { onDelete: "restrict" }),
     unit: text("unit").notNull(),
     costPrice: integer("cost_price").notNull().default(0),
+    /** Giá khách lẻ (giá niêm yết). */
     salePrice: integer("sale_price").notNull().default(0),
+    /** Giá đại lý; NULL = bằng giá lẻ (tính lúc dùng, nên đổi giá lẻ thì giá này đổi theo). */
+    dealerPrice: integer("dealer_price"),
+    /** Giá nhà phân phối; NULL = bằng giá lẻ. */
+    distributorPrice: integer("distributor_price"),
     minStock: integer("min_stock").notNull().default(0),
     brand: text("brand"),
     specifications: text("specifications"),
@@ -174,6 +207,7 @@ export const products = sqliteTable(
     image: text("image"),
     /** Lowercase text without diacritics, so search ignores case and Vietnamese accents. */
     searchText: text("search_text").notNull().default(""),
+    ...authorship,
     ...timestamps,
     ...softDelete,
   },
@@ -184,6 +218,8 @@ export const products = sqliteTable(
     index("products_name_idx").on(t.name),
     check("products_cost_price_check", sql`${t.costPrice} >= 0`),
     check("products_sale_price_check", sql`${t.salePrice} >= 0`),
+    check("products_dealer_price_check", sql`${t.dealerPrice} IS NULL OR (typeof(${t.dealerPrice}) = 'integer' AND ${t.dealerPrice} >= 0)`),
+    check("products_distributor_price_check", sql`${t.distributorPrice} IS NULL OR (typeof(${t.distributorPrice}) = 'integer' AND ${t.distributorPrice} >= 0)`),
     check("products_min_stock_check", sql`${t.minStock} >= 0`),
     check("products_status_check", sql`${t.status} IN ('active', 'discontinued')`),
   ],
@@ -210,6 +246,8 @@ export const inventoryTransactions = sqliteTable(
       .unique()
       .references((): AnySQLiteColumn => inventoryTransactions.id, { onDelete: "restrict" }),
     confirmedAt: text("confirmed_at"),
+    confirmedBy: userRef("confirmed_by"),
+    ...authorship,
     ...timestamps,
   },
   (t) => [

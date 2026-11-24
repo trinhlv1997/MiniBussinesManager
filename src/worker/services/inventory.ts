@@ -1,6 +1,8 @@
 import { aliasedTable, and, count, eq, exists, gte, inArray, isNull, lte, sql } from "drizzle-orm";
 import { formatDate, vnToday } from "@shared/format";
-import { TRANSACTION_STATUS_LABELS, TRANSACTION_TYPE_LABELS, type TransactionType } from "@shared/labels";
+import { TRANSACTION_STATUS_LABELS, TRANSACTION_TYPE_LABELS, type CustomerTier, type TransactionType } from "@shared/labels";
+import { seesAllCustomers } from "@shared/permissions";
+import { priceForTier } from "@shared/pricing";
 import type { InventoryLine, InventoryTransaction, InventoryTransactionDetail } from "@shared/types";
 import type {
   AdjustInput,
@@ -9,6 +11,7 @@ import type {
   TransactionListQuery,
 } from "@shared/validation/inventory";
 import type { Db } from "../../db/client";
+import type { Actor } from "../env";
 import {
   customers,
   employees,
@@ -18,6 +21,7 @@ import {
   products,
 } from "../../db/schema";
 import type { ExportColumn } from "../lib/export";
+import { isCustomerVisible } from "./customers";
 import { auditQuery, dbErrorText, matchSearch, notFound, pageOffset, runBatch, toPage } from "../lib/db";
 import { ApiError } from "../lib/errors";
 
@@ -37,6 +41,8 @@ type ProductFacts = {
   status: string;
   costPrice: number;
   salePrice: number;
+  dealerPrice: number | null;
+  distributorPrice: number | null;
   quantity: number;
 };
 
@@ -69,6 +75,9 @@ const summaryColumns = {
   note: transactions.note,
   reversalOfId: transactions.reversalOfId,
   confirmedAt: transactions.confirmedAt,
+  confirmedBy: transactions.confirmedBy,
+  createdBy: transactions.createdBy,
+  updatedBy: transactions.updatedBy,
   createdAt: transactions.createdAt,
   lineCount: sql<number>`COUNT(${items.id})`,
   totalQuantity: sql<number>`COALESCE(SUM(ABS(${items.quantityDelta})), 0)`,
@@ -99,7 +108,14 @@ function translateLedgerError(error: unknown): never {
 const recipientError = (field: "customerId" | "employeeId", message: string) =>
   new ApiError(422, "VALIDATION_ERROR", message, { [field]: message });
 
-async function assertRecipientExists(db: Db, { customerId, employeeId }: Recipient) {
+async function assertRecipientExists(db: Db, { customerId, employeeId }: Recipient, actor: Actor) {
+  // Employee chỉ xuất cho khách trong phạm vi của mình, và không cấp phát nội bộ cho nhân viên khác.
+  if (!seesAllCustomers(actor.role)) {
+    if (employeeId) throw recipientError("employeeId", "Bạn không có quyền xuất kho cho nhân viên");
+    if (customerId && !(await isCustomerVisible(db, customerId, actor))) {
+      throw recipientError("customerId", "Khách hàng không tồn tại hoặc không thuộc phạm vi của bạn");
+    }
+  }
   if (customerId) {
     const [row] = await db
       .select({ id: customers.id })
@@ -131,6 +147,8 @@ async function loadProducts(db: Db, productIds: number[]): Promise<Map<number, P
       status: products.status,
       costPrice: products.costPrice,
       salePrice: products.salePrice,
+      dealerPrice: products.dealerPrice,
+      distributorPrice: products.distributorPrice,
       quantity: inventoryBalances.quantity,
     })
     .from(products)
@@ -157,16 +175,30 @@ function assertStockAvailable(lines: Line[], facts: Map<number, ProductFacts>) {
   }
 }
 
-/** Validates the products, fills default prices and, when confirming, checks stock. */
+/** Hạng của khách nhận hàng, để chọn giá bán mặc định (null: xuất cho nhân viên hoặc chưa có người nhận). */
+async function recipientTier(db: Db, type: DocumentType, input: DocumentInput): Promise<CustomerTier | null> {
+  const customerId = type === "export" ? input.customerId : null;
+  if (!customerId) return null;
+  const [row] = await db.select({ tier: customers.tier }).from(customers).where(eq(customers.id, customerId)).limit(1);
+  return row?.tier ?? null;
+}
+
+/**
+ * Validates the products, fills default prices and, when confirming, checks stock.
+ * An export line without a price gets the price for the customer's tier (same rule as the form).
+ */
 async function prepareLines(db: Db, type: DocumentType, input: DocumentInput): Promise<Line[]> {
-  const facts = await loadProducts(db, input.lines.map((line) => line.productId));
+  const [facts, tier] = await Promise.all([
+    loadProducts(db, input.lines.map((line) => line.productId)),
+    recipientTier(db, type, input),
+  ]);
   const lines = input.lines.map((line, index) => {
     const product = facts.get(line.productId);
     if (!product) throw lineError(index, "Sản phẩm không tồn tại");
     if (type === "import" && product.status !== "active") {
       throw lineError(index, "Sản phẩm đã ngừng kinh doanh");
     }
-    const defaultPrice = { import: product.costPrice, export: product.salePrice, adjust: null }[type];
+    const defaultPrice = { import: product.costPrice, export: priceForTier(product, tier), adjust: null }[type];
     return { ...line, unitPrice: line.unitPrice ?? defaultPrice };
   });
   if (input.confirm) assertStockAvailable(lines, facts);
@@ -185,10 +217,10 @@ function lineInserts(db: Db, transactionId: number | typeof NEWEST_ID, lines: Li
   return statements;
 }
 
-const confirmQuery = (db: Db, where: ReturnType<typeof eq>) =>
+const confirmQuery = (db: Db, actor: Actor, where: ReturnType<typeof eq>) =>
   db
     .update(transactions)
-    .set({ status: "confirmed", confirmedAt: new Date().toISOString() })
+    .set({ status: "confirmed", confirmedAt: new Date().toISOString(), confirmedBy: actor.id, updatedBy: actor.id })
     .where(and(where, eq(transactions.status, "draft")))
     .returning({ id: transactions.id });
 
@@ -201,9 +233,9 @@ const snapshotCosts = (db: Db, transactionId: number | typeof NEWEST_ID) =>
     })
     .where(eq(items.transactionId, transactionId));
 
-const confirmSteps = (db: Db, type: TransactionType, id: number | typeof NEWEST_ID) => [
+const confirmSteps = (db: Db, actor: Actor, type: TransactionType, id: number | typeof NEWEST_ID) => [
   ...(type === "export" ? [snapshotCosts(db, id)] : []),
-  confirmQuery(db, eq(transactions.id, id)),
+  confirmQuery(db, actor, eq(transactions.id, id)),
 ];
 
 const documentFields = (input: DocumentFields) => ({
@@ -250,19 +282,19 @@ export const toDocument = {
 const nextDocumentCode = (type: TransactionType) =>
   sql<string>`${CODE_PREFIX[type]} || '-' || printf('%06d', COALESCE((SELECT MAX(id) FROM inventory_transactions), 0) + 1)`;
 
-export async function createDocument(db: Db, actorId: number, type: DocumentType, input: DocumentInput) {
-  await assertRecipientExists(db, input);
+export async function createDocument(db: Db, actor: Actor, type: DocumentType, input: DocumentInput) {
+  await assertRecipientExists(db, input, actor);
   const lines = await prepareLines(db, type, input);
   let results: unknown[] = [];
   try {
     results = await runBatch(db, [
       db
         .insert(transactions)
-        .values({ ...documentFields(input), code: nextDocumentCode(type), type })
+        .values({ ...documentFields(input), code: nextDocumentCode(type), type, createdBy: actor.id, updatedBy: actor.id })
         .returning({ id: transactions.id }),
       ...lineInserts(db, NEWEST_ID, lines),
-      ...(input.confirm ? confirmSteps(db, type, NEWEST_ID) : []),
-      auditQuery(db, actorId, `inventory.${type}`, "inventory_transaction", sql<string>`CAST(${NEWEST_ID} AS TEXT)`, {
+      ...(input.confirm ? confirmSteps(db, actor, type, NEWEST_ID) : []),
+      auditQuery(db, actor.id, `inventory.${type}`, "inventory_transaction", sql<string>`CAST(${NEWEST_ID} AS TEXT)`, {
         confirmed: input.confirm,
       }),
     ]);
@@ -290,26 +322,26 @@ async function findDraftHeader(db: Db, id: number) {
 
 export async function updateDraft(
   db: Db,
-  actorId: number,
+  actor: Actor,
   id: number,
   type: DocumentType,
   input: DocumentInput,
 ) {
   const header = await findDraftHeader(db, id);
   if (header.type !== type) throw notFound("Không tìm thấy phiếu kho");
-  await assertRecipientExists(db, input);
+  await assertRecipientExists(db, input, actor);
   const lines = await prepareLines(db, type, input);
 
   try {
     await runBatch(db, [
       db
         .update(transactions)
-        .set(documentFields(input))
+        .set({ ...documentFields(input), updatedBy: actor.id })
         .where(and(eq(transactions.id, id), eq(transactions.status, "draft"))),
       db.delete(items).where(eq(items.transactionId, id)),
       ...lineInserts(db, id, lines),
-      ...(input.confirm ? confirmSteps(db, type, id) : []),
-      auditQuery(db, actorId, "inventory.draft_update", "inventory_transaction", String(id), {
+      ...(input.confirm ? confirmSteps(db, actor, type, id) : []),
+      auditQuery(db, actor.id, "inventory.draft_update", "inventory_transaction", String(id), {
         confirmed: input.confirm,
       }),
     ]);
@@ -319,12 +351,12 @@ export async function updateDraft(
   return getTransaction(db, id);
 }
 
-export async function confirmTransaction(db: Db, actorId: number, id: number) {
+export async function confirmTransaction(db: Db, actor: Actor, id: number) {
   const header = await findDraftHeader(db, id);
   if (header.type === "export" && !header.customerId && !header.employeeId) {
     throw recipientError("customerId", "Phiếu xuất kho cần có người nhận trước khi xác nhận");
   }
-  await assertRecipientExists(db, header);
+  await assertRecipientExists(db, header, actor);
   const lines = await db
     .select({ productId: items.productId, quantityDelta: items.quantityDelta, unitPrice: items.unitPrice })
     .from(items)
@@ -334,12 +366,12 @@ export async function confirmTransaction(db: Db, actorId: number, id: number) {
   }
   assertStockAvailable(lines, await loadProducts(db, lines.map((line) => line.productId)));
 
-  const steps = confirmSteps(db, header.type, id);
+  const steps = confirmSteps(db, actor, header.type, id);
   let results: unknown[] = [];
   try {
     results = await runBatch(db, [
       ...steps,
-      auditQuery(db, actorId, "inventory.confirm", "inventory_transaction", String(id)),
+      auditQuery(db, actor.id, "inventory.confirm", "inventory_transaction", String(id)),
     ]);
   } catch (error) {
     translateLedgerError(error);
@@ -349,19 +381,19 @@ export async function confirmTransaction(db: Db, actorId: number, id: number) {
   return getTransaction(db, id);
 }
 
-export async function cancelTransaction(db: Db, actorId: number, id: number) {
+export async function cancelTransaction(db: Db, actor: Actor, id: number) {
   await findDraftHeader(db, id);
   await runBatch(db, [
     db
       .update(transactions)
-      .set({ status: "cancelled" })
+      .set({ status: "cancelled", updatedBy: actor.id })
       .where(and(eq(transactions.id, id), eq(transactions.status, "draft"))),
-    auditQuery(db, actorId, "inventory.cancel", "inventory_transaction", String(id)),
+    auditQuery(db, actor.id, "inventory.cancel", "inventory_transaction", String(id)),
   ]);
   return getTransaction(db, id);
 }
 
-export async function reverseTransaction(db: Db, actorId: number, id: number, reason: string) {
+export async function reverseTransaction(db: Db, actor: Actor, id: number, reason: string) {
   const original = await getTransaction(db, id);
   if (original.status !== "confirmed") {
     throw new ApiError(409, "INVALID_REVERSAL", "Chỉ có thể đảo ngược phiếu đã xác nhận");
@@ -387,10 +419,12 @@ export async function reverseTransaction(db: Db, actorId: number, id: number, re
         transactionDate: vnToday(),
         reason,
         reference: original.code,
+        createdBy: actor.id,
+        updatedBy: actor.id,
       }),
       ...lineInserts(db, NEWEST_ID, lines),
-      confirmQuery(db, eq(transactions.id, NEWEST_ID)),
-      auditQuery(db, actorId, "inventory.reverse", "inventory_transaction", String(id)),
+      confirmQuery(db, actor, eq(transactions.id, NEWEST_ID)),
+      auditQuery(db, actor.id, "inventory.reverse", "inventory_transaction", String(id)),
     ]);
   } catch (error) {
     translateLedgerError(error);

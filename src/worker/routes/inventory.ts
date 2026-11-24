@@ -25,7 +25,7 @@ import {
 } from "../services/inventory";
 import { listProducts } from "../services/products";
 
-const actor = (c: Context<AppEnv>) => ({ db: createDb(c.env.DB), adminId: c.get("admin").id });
+const context = (c: Context<AppEnv>) => ({ db: createDb(c.env.DB), actor: c.get("admin") });
 
 export const inventoryRoutes = new Hono<AppEnv>()
   .get("/balances", async (c) =>
@@ -49,45 +49,45 @@ export const inventoryRoutes = new Hono<AppEnv>()
     ok(c, await getTransaction(createDb(c.env.DB), parseId(c))),
   )
   .post("/transactions/:id{[0-9]+}/confirm", async (c) => {
-    const { db, adminId } = actor(c);
-    return ok(c, await confirmTransaction(db, adminId, parseId(c)));
+    const { db, actor } = context(c);
+    return ok(c, await confirmTransaction(db, actor, parseId(c)));
   })
   .post("/transactions/:id{[0-9]+}/cancel", async (c) => {
-    const { db, adminId } = actor(c);
-    return ok(c, await cancelTransaction(db, adminId, parseId(c)));
+    const { db, actor } = context(c);
+    return ok(c, await cancelTransaction(db, actor, parseId(c)));
   })
   .post("/transactions/:id{[0-9]+}/reverse", async (c) => {
     const { reason } = await parseJson(c, reverseSchema);
-    const { db, adminId } = actor(c);
-    return ok(c, await reverseTransaction(db, adminId, parseId(c), reason), 201);
+    const { db, actor } = context(c);
+    return ok(c, await reverseTransaction(db, actor, parseId(c), reason), 201);
   })
   .post("/import", async (c) => {
     const input = toDocument.import(await parseJson(c, importSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await createDocument(db, adminId, "import", input), 201);
+    const { db, actor } = context(c);
+    return ok(c, await createDocument(db, actor, "import", input), 201);
   })
   .post("/export", async (c) => {
     const input = toDocument.export(await parseJson(c, exportSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await createDocument(db, adminId, "export", input), 201);
+    const { db, actor } = context(c);
+    return ok(c, await createDocument(db, actor, "export", input), 201);
   })
   .post("/adjust", async (c) => {
     const input = toDocument.adjust(await parseJson(c, adjustSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await createDocument(db, adminId, "adjust", input), 201);
+    const { db, actor } = context(c);
+    return ok(c, await createDocument(db, actor, "adjust", input), 201);
   })
   .put("/import/:id{[0-9]+}", async (c) => {
     const input = toDocument.import(await parseJson(c, importSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await updateDraft(db, adminId, parseId(c), "import", input));
+    const { db, actor } = context(c);
+    return ok(c, await updateDraft(db, actor, parseId(c), "import", input));
   })
   .put("/export/:id{[0-9]+}", async (c) => {
     const input = toDocument.export(await parseJson(c, exportSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await updateDraft(db, adminId, parseId(c), "export", input));
+    const { db, actor } = context(c);
+    return ok(c, await updateDraft(db, actor, parseId(c), "export", input));
   })
   .put("/adjust/:id{[0-9]+}", async (c) => {
     const input = toDocument.adjust(await parseJson(c, adjustSchema));
-    const { db, adminId } = actor(c);
-    return ok(c, await updateDraft(db, adminId, parseId(c), "adjust", input));
+    const { db, actor } = context(c);
+    return ok(c, await updateDraft(db, actor, parseId(c), "adjust", input));
   });

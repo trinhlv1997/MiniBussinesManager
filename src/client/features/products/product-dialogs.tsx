@@ -18,6 +18,8 @@ import { ProductStatusBadge, StockBadge } from "@/components/common/status";
 import { useSaveForm } from "@/hooks/use-save-form";
 import { apiRequest } from "@/lib/api";
 import { useResourceDetail, useSaveResource } from "@/lib/resource";
+import { RecordHistory } from "@/features/audit/record-history";
+import { useAuthorshipItems } from "@/features/users/use-user-names";
 
 export const PRODUCTS = { key: "products", path: "/products" };
 export const CATEGORIES = { key: "product-categories", path: "/product-categories" };
@@ -46,6 +48,8 @@ function ProductForm({ product, onClose }: { product?: ProductDetail; onClose: (
       unit: product?.unit ?? "Cái",
       costPrice: product?.costPrice ?? 0,
       salePrice: product?.salePrice ?? 0,
+      dealerPrice: product?.dealerPrice ?? null,
+      distributorPrice: product?.distributorPrice ?? null,
       minStock: product?.minStock ?? 0,
       brand: product?.brand ?? "",
       specifications: product?.specifications ?? "",
@@ -86,10 +90,32 @@ function ProductForm({ product, onClose }: { product?: ProductDetail; onClose: (
         <SelectField control={form.control} name="unit" label="Đơn vị tính" options={units} />
         <NumberField control={form.control} name="warrantyMonths" label="Bảo hành (tháng)" hint="Nhập 0 nếu không bảo hành" />
         <NumberField control={form.control} name="costPrice" label="Giá nhập (₫)" />
-        <NumberField control={form.control} name="salePrice" label="Giá bán (₫)" />
         <NumberField control={form.control} name="minStock" label="Số lượng tồn tối thiểu" />
         <SelectField control={form.control} name="status" label="Trạng thái" options={optionsFrom(PRODUCT_STATUS_LABELS)} />
       </div>
+      <fieldset className="space-y-3 rounded-lg border p-3">
+        <legend className="px-1 text-sm font-medium">Giá bán theo hạng khách hàng</legend>
+        <div className="grid gap-4 sm:grid-cols-3">
+          <NumberField
+            control={form.control}
+            name="distributorPrice"
+            label="Giá phân phối (₫)"
+            placeholder="Bằng giá lẻ"
+            hint="Khách VIP (Nhà phân phối)"
+          />
+          <NumberField
+            control={form.control}
+            name="dealerPrice"
+            label="Giá đại lý (₫)"
+            placeholder="Bằng giá lẻ"
+            hint="Khách Bình thường (Đại lý)"
+          />
+          <NumberField control={form.control} name="salePrice" label="Giá khách lẻ (₫)" hint="Khách Cơ bản (Khách lẻ)" />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Khi lập phiếu xuất, đơn giá tự điền theo hạng của khách hàng. Bỏ trống giá phân phối / đại lý thì dùng giá lẻ.
+        </p>
+      </fieldset>
       <FormField
         label="Thông số kỹ thuật"
         placeholder="Ví dụ: 220V · 9W · 6500K"
@@ -117,6 +143,7 @@ export function ProductFormDialog({ id, onClose }: { id?: number; onClose: () =>
 
 export function ProductDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { data, error } = useDetail(id);
+  const authorship = useAuthorshipItems();
   return (
     <AppDialog open onClose={onClose} title={data?.name ?? "Chi tiết sản phẩm"}>
       {error && <ErrorState description={error.message} />}
@@ -134,14 +161,18 @@ export function ProductDetailDialog({ id, onClose }: { id: number; onClose: () =
               ["Đơn vị tính", data.unit],
               ["Trạng thái", <ProductStatusBadge key="status" status={data.status} />],
               ["Giá nhập", formatVnd(data.costPrice)],
-              ["Giá bán", formatVnd(data.salePrice)],
+              ["Giá phân phối", data.distributorPrice === null ? `${formatVnd(data.salePrice)} (bằng giá lẻ)` : formatVnd(data.distributorPrice)],
+              ["Giá đại lý", data.dealerPrice === null ? `${formatVnd(data.salePrice)} (bằng giá lẻ)` : formatVnd(data.dealerPrice)],
+              ["Giá khách lẻ", formatVnd(data.salePrice)],
               ["Số lượng tồn", `${formatNumber(data.quantity)} ${data.unit}`],
               ["Tồn tối thiểu", formatNumber(data.minStock)],
               ["Tình trạng tồn kho", <StockBadge key="stock" status={data.stockStatus} />],
               ["Giá trị tồn", formatVnd(data.quantity * data.costPrice)],
               ["Mô tả", data.description],
+              ...authorship(data),
             ]}
           />
+          <RecordHistory entityType="product" entityId={data.id} />
           {data.hasHistory && (
             <p className="text-sm text-muted-foreground">
               Sản phẩm đã có giao dịch kho nên không thể xóa. Nếu không bán nữa, hãy chuyển sang ngừng kinh doanh.

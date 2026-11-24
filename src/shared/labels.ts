@@ -13,12 +13,13 @@ export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
   business: "Doanh nghiệp",
 };
 
-/** Hạng khách hàng để biết mức độ ưu tiên khi chăm sóc. */
-export const CUSTOMER_TIERS = ["normal", "vip"] as const;
+/** Hạng khách hàng theo kênh bán, từ cao xuống thấp (thứ tự này dùng cho ô chọn). */
+export const CUSTOMER_TIERS = ["vip", "normal", "basic"] as const;
 export type CustomerTier = (typeof CUSTOMER_TIERS)[number];
 export const CUSTOMER_TIER_LABELS: Record<CustomerTier, string> = {
-  normal: "Bình thường",
-  vip: "VIP",
+  vip: "VIP (Nhà phân phối)",
+  normal: "Bình thường (Đại lý)",
+  basic: "Cơ bản (Khách lẻ)",
 };
 
 export const PRODUCT_STATUSES = ["active", "discontinued"] as const;

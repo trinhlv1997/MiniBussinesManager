@@ -102,7 +102,12 @@ function CustomersReportTab() {
               <StatCard label="Tổng khách hàng" icon={Users} value={formatNumber(data.total)} />
               <StatCard label="Khách hàng cá nhân" icon={UserRound} value={formatNumber(data.individual)} />
               <StatCard label="Khách hàng doanh nghiệp" icon={Building2} value={formatNumber(data.business)} />
-              <StatCard label="Khách hàng VIP" icon={Star} value={formatNumber(data.vip)} />
+              <StatCard
+                label="Nhà phân phối (VIP)"
+                icon={Star}
+                value={formatNumber(data.vip)}
+                note={`Đại lý: ${formatNumber(data.normal)} · Khách lẻ: ${formatNumber(data.basic)}`}
+              />
               <StatCard label="Khách hàng mới" icon={UserPlus} value={formatNumber(data.newInRange)} note="Trong khoảng đã chọn" />
             </StatGrid>
             <ChartCard title="Khách hàng mới theo thời gian">

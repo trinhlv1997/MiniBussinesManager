@@ -22,6 +22,8 @@ const profileColumns = {
   id: adminUsers.id,
   username: adminUsers.username,
   displayName: adminUsers.displayName,
+  role: adminUsers.role,
+  employeeId: adminUsers.employeeId,
 };
 
 function newSession(userId: number) {
@@ -57,6 +59,10 @@ export async function login(
   if (!user || !result.valid) {
     throw new ApiError(401, "INVALID_CREDENTIALS", "Tên đăng nhập hoặc mật khẩu không đúng");
   }
+  // Chỉ báo "đã khoá" sau khi mật khẩu đúng, để không lộ tài khoản nào tồn tại.
+  if (!user.active) {
+    throw new ApiError(403, "ACCOUNT_DISABLED", "Tài khoản đã bị khoá. Vui lòng liên hệ quản trị viên.");
+  }
 
   const session = newSession(user.id);
   const nowIso = new Date().toISOString();
@@ -71,6 +77,7 @@ export async function login(
       userId: user.id,
       expiresAt: session.expiresAt,
     }),
+    db.update(adminUsers).set({ lastLoginAt: nowIso }).where(eq(adminUsers.id, user.id)),
     db.insert(auditLogs).values({
       actorId: user.id,
       action: "auth.login",
@@ -81,7 +88,13 @@ export async function login(
 
   return {
     token: session.token,
-    admin: { id: user.id, username: user.username, displayName: user.displayName },
+    admin: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      role: user.role,
+      employeeId: user.employeeId,
+    },
   };
 }
 
@@ -95,7 +108,12 @@ export async function findSession(
     .from(adminSessions)
     .innerJoin(adminUsers, eq(adminUsers.id, adminSessions.userId))
     .where(
-      and(eq(adminSessions.id, sessionId), gt(adminSessions.expiresAt, new Date().toISOString())),
+      and(
+        eq(adminSessions.id, sessionId),
+        gt(adminSessions.expiresAt, new Date().toISOString()),
+        // Khoá tài khoản có hiệu lực ngay, kể cả với phiên đang mở.
+        eq(adminUsers.active, true),
+      ),
     )
     .limit(1);
   return row ? { sessionId, admin: row } : null;

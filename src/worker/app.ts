@@ -4,7 +4,9 @@ import type { ApiFailure } from "@shared/api";
 import type { AppEnv } from "./env";
 import { ApiError } from "./lib/errors";
 import { ok } from "./lib/http";
-import { apiHeaders, requireAdmin, requireSameOrigin } from "./middleware/security";
+import type { Module } from "@shared/permissions";
+import { apiHeaders, requireAdmin, requireModule, requireSameOrigin } from "./middleware/security";
+import { auditRoutes, userNameRoutes, userRoutes } from "./routes/admin";
 import { dashboardRoutes, reportRoutes } from "./routes/analytics";
 import { authRoutes } from "./routes/auth";
 import { inventoryRoutes } from "./routes/inventory";
@@ -32,16 +34,28 @@ app.use(
 );
 app.use("*", requireAdmin);
 
+/** Mỗi nhóm API chỉ mở cho vai trò được phép dùng chức năng đó (shared/permissions.ts). */
+const guarded = (module: Module, routes: Hono<AppEnv>) =>
+  new Hono<AppEnv>().use("*", requireModule(module)).route("/", routes);
+
+/** Thông tin công ty: ai đăng nhập cũng đọc được (tên app, in phiếu PDF), chỉ Admin được sửa. */
+const settingsGuard = new Hono<AppEnv>()
+  .use("*", async (c, next) => (c.req.method === "GET" ? next() : requireModule("settings")(c, next)))
+  .route("/", settingsRoutes);
+
 app.get("/health", (c) => ok(c, { status: "ok" }));
 app.route("/auth", authRoutes);
-app.route("/employees", employeeRoutes);
-app.route("/customers", customerRoutes);
-app.route("/products", productRoutes);
-app.route("/product-categories", categoryRoutes);
-app.route("/inventory", inventoryRoutes);
-app.route("/dashboard", dashboardRoutes);
-app.route("/reports", reportRoutes);
-app.route("/settings", settingsRoutes);
+app.route("/user-names", userNameRoutes);
+app.route("/employees", guarded("employees", employeeRoutes));
+app.route("/customers", guarded("customers", customerRoutes));
+app.route("/products", guarded("products", productRoutes));
+app.route("/product-categories", guarded("products", categoryRoutes));
+app.route("/inventory", guarded("inventory", inventoryRoutes));
+app.route("/dashboard", guarded("dashboard", dashboardRoutes));
+app.route("/reports", guarded("reports", reportRoutes));
+app.route("/settings", settingsGuard);
+app.route("/users", guarded("users", userRoutes));
+app.route("/audit-logs", guarded("audit", auditRoutes));
 
 app.notFound((c) =>
   c.json<ApiFailure>(

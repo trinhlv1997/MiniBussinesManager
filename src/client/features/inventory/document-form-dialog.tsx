@@ -5,7 +5,9 @@ import { useState, type FormEvent } from "react";
 import { Controller, useFieldArray, useForm, useWatch, type Resolver } from "react-hook-form";
 import { toast } from "sonner";
 import { formatNumber, formatVnd, vnToday } from "@shared/format";
-import type { InventoryTransactionDetail, Product } from "@shared/types";
+import type { CustomerTier } from "@shared/labels";
+import { priceForTier, priceLabelForTier, type TierPrices } from "@shared/pricing";
+import type { Customer, InventoryTransactionDetail, Product } from "@shared/types";
 import { MAX_DOCUMENT_LINES, adjustSchema, exportSchema, importSchema } from "@shared/validation/inventory";
 import { FormDialog } from "@/components/common/dialogs";
 import { DateField, Field, NumberInput, TextareaField } from "@/components/common/form-controls";
@@ -14,7 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { apiRequest } from "@/lib/api";
 import { applyServerErrors } from "@/lib/form-errors";
-import { refreshAfterChange } from "@/lib/resource";
+import { refreshAfterChange, useResourceDetail } from "@/lib/resource";
 import { ProductCombobox } from "./product-combobox";
 import { RecipientPicker, type Recipient } from "./recipient-picker";
 
@@ -26,6 +28,10 @@ type LineValues = {
   unit: string;
   available?: number;
   defaultPrice?: number;
+  /** Ba mức giá của sản phẩm (chỉ phiếu xuất), để điền lại khi đổi khách hàng. */
+  prices?: TierPrices;
+  /** Người dùng đã gõ đơn giá khác giá theo hạng: không tự ghi đè nữa. */
+  manualPrice?: boolean;
   quantity?: number;
   unitPrice?: number | null;
   delta?: number;
@@ -93,6 +99,13 @@ export function DocumentFormDialog({
   const watched = useWatch({ control: form.control, name: "lines" });
   const recipientLabel = useWatch({ control: form.control, name: "recipientLabel" });
   const { errors } = form.formState;
+  const isExport = kind === "export";
+
+  // Hạng của khách nhận hàng quyết định giá bán tự điền. Khi sửa phiếu nháp, lấy hạng từ hồ sơ khách.
+  // undefined = chưa chọn lại người nhận trong form này.
+  const [pickedTier, setPickedTier] = useState<CustomerTier | null | undefined>(undefined);
+  const savedCustomer = useResourceDetail<Customer>("customers", "/customers", isExport ? document?.customerId : null);
+  const tier = pickedTier !== undefined ? pickedTier : (savedCustomer.data?.tier ?? null);
 
   const save = useMutation({
     mutationFn: (body: unknown) =>
@@ -118,21 +131,45 @@ export function DocumentFormDialog({
     })(event);
   };
 
-  const pickRecipient = ({ customerId, employeeId, label }: Recipient) => {
+  const pickRecipient = ({ customerId, employeeId, label, tier: nextTier }: Recipient) => {
     form.setValue("customerId", customerId);
     form.setValue("employeeId", employeeId);
     form.setValue("recipientLabel", label);
     form.clearErrors(["customerId", "employeeId"]);
+    setPickedTier(nextTier);
+    // Đổi khách thì điền lại giá theo hạng mới, trừ những dòng đã nhập giá tay.
+    form.getValues("lines").forEach((line, index) => {
+      if (!line.prices || line.manualPrice) return;
+      const price = priceForTier(line.prices, nextTier);
+      form.setValue(`lines.${index}.defaultPrice`, price);
+      form.setValue(`lines.${index}.unitPrice`, price);
+    });
   };
 
   const pickProduct = (index: number, product: Product) => {
-    const defaultPrice = kind === "import" ? product.costPrice : product.salePrice;
     form.setValue(`lines.${index}.productId`, product.id, { shouldValidate: true });
     form.setValue(`lines.${index}.label`, `${product.sku} · ${product.name}`);
     form.setValue(`lines.${index}.unit`, product.unit);
     form.setValue(`lines.${index}.available`, product.quantity);
-    form.setValue(`lines.${index}.defaultPrice`, defaultPrice);
-    form.setValue(`lines.${index}.unitPrice`, null);
+    if (isExport) {
+      const prices = { distributorPrice: product.distributorPrice, dealerPrice: product.dealerPrice, salePrice: product.salePrice };
+      const price = priceForTier(prices, tier);
+      form.setValue(`lines.${index}.prices`, prices);
+      form.setValue(`lines.${index}.manualPrice`, false);
+      form.setValue(`lines.${index}.defaultPrice`, price);
+      form.setValue(`lines.${index}.unitPrice`, price);
+    } else {
+      form.setValue(`lines.${index}.defaultPrice`, kind === "import" ? product.costPrice : undefined);
+      form.setValue(`lines.${index}.unitPrice`, null);
+    }
+  };
+
+  /** Gõ giá khác giá theo hạng thì giữ nguyên; xoá trống thì quay về giá theo hạng. */
+  const changePrice = (index: number, value: number | undefined) => {
+    const line = form.getValues(`lines.${index}`);
+    const auto = line.prices ? priceForTier(line.prices, tier) : undefined;
+    form.setValue(`lines.${index}.unitPrice`, value ?? null);
+    form.setValue(`lines.${index}.manualPrice`, value !== undefined && value !== auto);
   };
 
   const total = watched.reduce((sum, line) => {
@@ -165,7 +202,11 @@ export function DocumentFormDialog({
       <div className="grid gap-4 sm:grid-cols-2">
         <DateField control={form.control} name="transactionDate" label={kind === "import" ? "Ngày nhập" : kind === "export" ? "Ngày xuất" : "Ngày điều chỉnh"} />
         {kind === "export" && (
-          <Field label="Người nhận" error={errors.customerId ?? errors.employeeId}>
+          <Field
+            label="Người nhận"
+            error={errors.customerId ?? errors.employeeId}
+            hint={recipientLabel ? `Đơn giá tự điền: ${priceLabelForTier(tier)}` : "Chọn khách hàng để tự điền giá theo hạng"}
+          >
             {({ id, invalid }) => (
               <RecipientPicker
                 id={id}
@@ -238,7 +279,7 @@ export function DocumentFormDialog({
                         aria-label={`Đơn giá dòng ${index + 1}`}
                         placeholder={line?.defaultPrice === undefined ? "Đơn giá" : formatNumber(line.defaultPrice)}
                         value={input.value}
-                        onChange={input.onChange}
+                        onChange={(value) => (isExport ? changePrice(index, value) : input.onChange(value))}
                       />
                     )}
                   />
@@ -258,6 +299,14 @@ export function DocumentFormDialog({
                 <p className={`mt-1 text-xs ${message || (after ?? 0) < 0 ? "text-destructive" : "text-muted-foreground"}`}>
                   {message ??
                     `Tồn hiện tại ${formatNumber(line?.available ?? 0)}, sau phiếu ${(after ?? 0) < 0 ? "-" : ""}${formatNumber(Math.abs(after ?? 0))} ${line?.unit ?? ""}`}
+                  {!message && line?.prices && (
+                    <span className={line.manualPrice ? "text-amber-700 dark:text-amber-400" : undefined}>
+                      {" · "}
+                      {line.manualPrice
+                        ? `Giá nhập tay (${priceLabelForTier(tier).toLowerCase()}: ${formatNumber(priceForTier(line.prices, tier))})`
+                        : priceLabelForTier(tier)}
+                    </span>
+                  )}
                 </p>
               )}
             </div>

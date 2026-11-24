@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { Paginated } from "@shared/api";
 import { idParam } from "@shared/validation/common";
 import { createDb, type Db } from "../../db/client";
-import type { AppEnv } from "../env";
+import type { Actor, AppEnv } from "../env";
 import { MAX_EXPORT_ROWS, excelResponse, type ExportColumn } from "./export";
 import { validationError } from "./errors";
 import { ok, parseJson } from "./http";
@@ -30,11 +30,12 @@ export type ResourceConfig<Row, Query extends PagedQuery, Input> = {
   /** Tên sheet trong file Excel, ví dụ "Nhân viên". */
   sheetName: string;
   columns: ExportColumn<Row>[];
-  list: (db: Db, query: Query) => Promise<Paginated<Row>>;
-  get: (db: Db, id: number) => Promise<unknown>;
-  create: (db: Db, actorId: number, input: Input) => Promise<unknown>;
-  update: (db: Db, actorId: number, id: number, input: Input) => Promise<unknown>;
-  remove: (db: Db, actorId: number, id: number) => Promise<void>;
+  // `actor` = người đang thao tác: ghi người tạo / người sửa và giới hạn phạm vi dữ liệu theo vai trò.
+  list: (db: Db, query: Query, actor: Actor) => Promise<Paginated<Row>>;
+  get: (db: Db, id: number, actor: Actor) => Promise<unknown>;
+  create: (db: Db, actor: Actor, input: Input) => Promise<unknown>;
+  update: (db: Db, actor: Actor, id: number, input: Input) => Promise<unknown>;
+  remove: (db: Db, actor: Actor, id: number) => Promise<void>;
 };
 
 /** The standard list, export, read, create, update and delete endpoints of a module. */
@@ -43,11 +44,11 @@ export function resourceRoutes<Row, Query extends PagedQuery, Input>(
 ) {
   return new Hono<AppEnv>()
     .get("/", async (c) =>
-      ok(c, await config.list(createDb(c.env.DB), parseQuery(c, config.querySchema))),
+      ok(c, await config.list(createDb(c.env.DB), parseQuery(c, config.querySchema), c.get("admin"))),
     )
     .get("/export", async (c) => {
       const query = { ...parseQuery(c, config.querySchema), page: 1, pageSize: MAX_EXPORT_ROWS };
-      const { items, pagination } = await config.list(createDb(c.env.DB), query);
+      const { items, pagination } = await config.list(createDb(c.env.DB), query, c.get("admin"));
       return excelResponse(c, {
         fileName: config.exportName,
         sheetName: config.sheetName,
@@ -56,17 +57,17 @@ export function resourceRoutes<Row, Query extends PagedQuery, Input>(
         total: pagination.total,
       });
     })
-    .get("/:id{[0-9]+}", async (c) => ok(c, await config.get(createDb(c.env.DB), parseId(c))))
+    .get("/:id{[0-9]+}", async (c) => ok(c, await config.get(createDb(c.env.DB), parseId(c), c.get("admin"))))
     .post("/", async (c) => {
       const input = await parseJson(c, config.bodySchema);
-      return ok(c, await config.create(createDb(c.env.DB), c.get("admin").id, input), 201);
+      return ok(c, await config.create(createDb(c.env.DB), c.get("admin"), input), 201);
     })
     .put("/:id{[0-9]+}", async (c) => {
       const input = await parseJson(c, config.bodySchema);
-      return ok(c, await config.update(createDb(c.env.DB), c.get("admin").id, parseId(c), input));
+      return ok(c, await config.update(createDb(c.env.DB), c.get("admin"), parseId(c), input));
     })
     .delete("/:id{[0-9]+}", async (c) => {
-      await config.remove(createDb(c.env.DB), c.get("admin").id, parseId(c));
+      await config.remove(createDb(c.env.DB), c.get("admin"), parseId(c));
       return ok(c, null);
     });
 }

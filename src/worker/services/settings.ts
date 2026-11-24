@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import type { CompanySettings } from "@shared/types";
 import type { SettingsInput } from "@shared/validation/reports";
 import type { Db } from "../../db/client";
+import type { Actor } from "../env";
 import { companySettings } from "../../db/schema";
 import { auditQuery, runBatch } from "../lib/db";
 
@@ -42,7 +43,7 @@ export async function getSettings(db: Db): Promise<CompanySettings> {
   return row ?? DEFAULTS;
 }
 
-export async function saveSettings(db: Db, actorId: number, input: SettingsInput) {
+export async function saveSettings(db: Db, actor: Actor, input: SettingsInput) {
   await runBatch(db, [
     db
       .insert(companySettings)
@@ -51,7 +52,7 @@ export async function saveSettings(db: Db, actorId: number, input: SettingsInput
         target: companySettings.id,
         set: { ...input, updatedAt: new Date().toISOString() },
       }),
-    auditQuery(db, actorId, "settings.update", "company_settings", String(SETTINGS_ID)),
+    auditQuery(db, actor.id, "settings.update", "company_settings", String(SETTINGS_ID)),
   ]);
   return getSettings(db);
 }

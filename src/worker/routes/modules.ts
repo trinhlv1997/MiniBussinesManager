@@ -73,11 +73,11 @@ export const customerRoutes = resourceRoutes({
 })
   .post("/:id{[0-9]+}/notes", async (c) => {
     const { content } = await parseJson(c, customerNoteSchema);
-    const note = await addCustomerNote(createDb(c.env.DB), c.get("admin").id, parseId(c), content);
+    const note = await addCustomerNote(createDb(c.env.DB), c.get("admin"), parseId(c), content);
     return ok(c, note, 201);
   })
   .delete("/:id{[0-9]+}/notes/:noteId{[0-9]+}", async (c) => {
-    await deleteCustomerNote(createDb(c.env.DB), c.get("admin").id, parseId(c), parseId(c, "noteId"));
+    await deleteCustomerNote(createDb(c.env.DB), c.get("admin"), parseId(c), parseId(c, "noteId"));
     return ok(c, null);
   });
 
@@ -98,14 +98,14 @@ export const categoryRoutes = new Hono<AppEnv>()
   .get("/", async (c) => ok(c, await listCategories(createDb(c.env.DB))))
   .post("/", async (c) => {
     const input = await parseJson(c, categorySchema);
-    return ok(c, await createCategory(createDb(c.env.DB), c.get("admin").id, input), 201);
+    return ok(c, await createCategory(createDb(c.env.DB), c.get("admin"), input), 201);
   })
   .put("/:id{[0-9]+}", async (c) => {
     const input = await parseJson(c, categorySchema);
-    return ok(c, await updateCategory(createDb(c.env.DB), c.get("admin").id, parseId(c), input));
+    return ok(c, await updateCategory(createDb(c.env.DB), c.get("admin"), parseId(c), input));
   })
   .delete("/:id{[0-9]+}", async (c) => {
-    await deleteCategory(createDb(c.env.DB), c.get("admin").id, parseId(c));
+    await deleteCategory(createDb(c.env.DB), c.get("admin"), parseId(c));
     return ok(c, null);
   });
 
@@ -113,5 +113,5 @@ export const settingsRoutes = new Hono<AppEnv>()
   .get("/", async (c) => ok(c, await getSettings(createDb(c.env.DB))))
   .put("/", async (c) => {
     const input = await parseJson(c, settingsSchema);
-    return ok(c, await saveSettings(createDb(c.env.DB), c.get("admin").id, input));
+    return ok(c, await saveSettings(createDb(c.env.DB), c.get("admin"), input));
   });

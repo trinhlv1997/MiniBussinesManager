@@ -14,6 +14,8 @@ import { buildDemoSql } from "./demo-data";
  */
 const DEMO_USERNAME = "admin";
 const DEMO_PASSWORD = "admin";
+const DEMO_STAFF_USERNAME = "nhanvien";
+const DEMO_STAFF_PASSWORD = "nhanvien";
 
 const remote = process.argv.includes("--remote");
 const demoOnly = remote && process.argv.includes("--demo");
@@ -108,12 +110,15 @@ if (demoOnly) {
   const passwordHash = await hashPassword(password, required(setting("PASSWORD_PEPPER"), "PASSWORD_PEPPER"));
 
   executeSql(`
-INSERT INTO admin_users (id, username, display_name, password_hash)
-VALUES (1, ${sqlText(username)}, ${sqlText(displayName)}, ${sqlText(passwordHash)})
+INSERT INTO admin_users (id, username, display_name, password_hash, role, active)
+VALUES (1, ${sqlText(username)}, ${sqlText(displayName)}, ${sqlText(passwordHash)}, 'admin', 1)
 ON CONFLICT (id) DO UPDATE SET
   username = excluded.username,
   display_name = excluded.display_name,
   password_hash = excluded.password_hash,
+  -- Đường cứu hộ: tài khoản số 1 luôn trở lại là Admin đang hoạt động (kể cả khi lỡ bị khoá / hạ quyền).
+  role = 'admin',
+  active = 1,
   password_changed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
   updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now');
 DELETE FROM admin_sessions;
@@ -124,5 +129,13 @@ ${remote ? "INSERT OR IGNORE INTO company_settings (id, company_name) VALUES (1,
   if (!remote) {
     console.log(`Mật khẩu demo (chỉ dùng khi phát triển): ${DEMO_PASSWORD}`);
     seedDemoData();
+    // Tài khoản vai trò Nhân viên để thử phân quyền: gắn với NV0006 (Kinh doanh đại lý) trong dữ liệu demo.
+    const staffHash = await hashPassword(DEMO_STAFF_PASSWORD, required(setting("PASSWORD_PEPPER"), "PASSWORD_PEPPER"));
+    executeSql(`
+INSERT INTO admin_users (username, display_name, password_hash, role, employee_id)
+SELECT ${sqlText(DEMO_STAFF_USERNAME)}, full_name, ${sqlText(staffHash)}, 'employee', id FROM employees
+WHERE code = 'NV0006' AND deleted_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM admin_users WHERE username = ${sqlText(DEMO_STAFF_USERNAME)} OR employee_id = employees.id);`);
+    console.log(`Tài khoản Nhân viên demo: ${DEMO_STAFF_USERNAME} / ${DEMO_STAFF_PASSWORD}`);
   }
 }

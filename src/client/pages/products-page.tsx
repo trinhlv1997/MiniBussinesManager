@@ -1,6 +1,7 @@
 import { FolderTree, Package, Plus } from "lucide-react";
 import { useState } from "react";
 import { formatNumber, formatVnd } from "@shared/format";
+import { priceForTier } from "@shared/pricing";
 import { PRODUCT_STATUS_LABELS, STOCK_STATUS_LABELS } from "@shared/labels";
 import type { Product } from "@shared/types";
 import { DataTable, type Column } from "@/components/common/data-table";
@@ -72,7 +73,14 @@ export default function ProductsPage() {
       header: "Giá bán",
       sortKey: "salePrice",
       className: "hidden text-right md:table-cell",
-      cell: (row) => <span className="tabular-nums">{formatVnd(row.salePrice)}</span>,
+      cell: (row) => (
+        <div className="tabular-nums leading-tight">
+          <p title="Giá khách lẻ">{formatVnd(row.salePrice)}</p>
+          <p className="text-xs whitespace-nowrap text-muted-foreground" title="Giá đại lý · Giá phân phối">
+            ĐL {formatNumber(priceForTier(row, "normal"))} · PP {formatNumber(priceForTier(row, "vip"))}
+          </p>
+        </div>
+      ),
     },
     {
       key: "quantity",

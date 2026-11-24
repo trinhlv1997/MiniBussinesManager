@@ -25,6 +25,7 @@ import { DocumentFormDialog, type DocumentKind } from "@/features/inventory/docu
 import { categoryOptions, useCategories } from "@/features/products/product-dialogs";
 import { useListParams } from "@/hooks/use-list-params";
 import { toQueryString, useResourceList } from "@/lib/resource";
+import { useUserNames } from "@/features/users/use-user-names";
 
 const stockColumns: Column<Product>[] = [
   {
@@ -149,6 +150,7 @@ function HistoryTab() {
   const params = useListParams();
   const [openId, setOpenId] = useState<number | null>(null);
   const list = useResourceList<InventoryTransaction>("inventory", "/inventory/transactions", params.values);
+  const nameOf = useUserNames();
   const filters = {
     search: params.get("search"),
     type: params.get("type"),
@@ -178,6 +180,12 @@ function HistoryTab() {
       header: "Người nhận / tham chiếu",
       className: "hidden lg:table-cell",
       cell: (row) => row.recipientName ?? row.reference ?? row.reason ?? "—",
+    },
+    {
+      key: "createdBy",
+      header: "Người lập",
+      className: "hidden xl:table-cell",
+      cell: (row) => nameOf(row.createdBy) ?? "—",
     },
   ];
 

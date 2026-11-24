@@ -104,6 +104,8 @@ const blankToUndefined = (value: unknown) => (value === "" ? undefined : value);
 
 export const queryText = z.preprocess(blankToUndefined, z.string().trim().max(100).optional());
 export const queryId = z.preprocess(blankToUndefined, idParam.optional());
+/** Liên kết không bắt buộc tới bản ghi khác: bỏ trống (null, "") thì lưu null. */
+export const optionalId = z.preprocess((value) => (value === "" || value === undefined ? null : value), idParam.nullable());
 export const queryDate = z.preprocess(blankToUndefined, dateString.optional());
 export const queryEnum = <const T extends readonly [string, ...string[]]>(values: T) =>
   z.preprocess(blankToUndefined, z.enum(values).optional());

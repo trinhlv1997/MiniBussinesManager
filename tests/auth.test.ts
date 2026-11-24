@@ -33,7 +33,7 @@ describe("login", () => {
     expect(header).toMatch(/SameSite=Strict/i);
 
     const body = await response.json<{ data: { admin: Record<string, unknown> } }>();
-    expect(body.data.admin).toEqual({ id: 1, username: "admin", displayName: "Quản trị viên" });
+    expect(body.data.admin).toEqual({ id: 1, username: "admin", displayName: "Quản trị viên", role: "admin", employeeId: null });
 
     const token = sessionCookie(response).split("=")[1];
     const row = await env.DB.prepare("SELECT id FROM admin_sessions").first<{ id: string }>();

@@ -307,7 +307,9 @@ export async function getCustomerReport(db: Db, range: DateRange): Promise<Custo
       SELECT COUNT(*) AS total,
         COALESCE(SUM(type = 'individual'), 0) AS individual,
         COALESCE(SUM(type = 'business'), 0) AS business,
-        COALESCE(SUM(tier = 'vip'), 0) AS vip
+        COALESCE(SUM(tier = 'vip'), 0) AS vip,
+        COALESCE(SUM(tier = 'normal'), 0) AS normal,
+        COALESCE(SUM(tier = 'basic'), 0) AS basic
       FROM customers WHERE deleted_at IS NULL`),
     rawQuery(db, sql`
       SELECT date(created_at, '+7 hours') AS day, COUNT(*) AS count FROM customers

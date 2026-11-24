@@ -3,7 +3,7 @@ import { ChevronsUpDown, Plus } from "lucide-react";
 import { useState, type KeyboardEvent } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
-import { CUSTOMER_TYPE_LABELS } from "@shared/labels";
+import { CUSTOMER_TIER_LABELS, CUSTOMER_TYPE_LABELS, type CustomerTier } from "@shared/labels";
 import { toSearchText } from "@shared/text";
 import type { Customer, Employee } from "@shared/types";
 import {
@@ -18,11 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { applyServerErrors } from "@/lib/form-errors";
+import { useCan } from "@/features/auth/use-auth";
 import { useResourceList, useSaveResource } from "@/lib/resource";
 
-export type Recipient = { customerId: number | null; employeeId: number | null; label: string };
+/** `tier` chỉ có khi người nhận là khách hàng; form phiếu xuất dùng nó để chọn giá bán. */
+export type Recipient = { customerId: number | null; employeeId: number | null; label: string; tier: CustomerTier | null };
 type Mode = "customer" | "employee";
-type Option = { id: number; code: string; name: string; detail: string | null };
+type Option = { id: number; code: string; name: string; detail: string | null; tier: CustomerTier | null };
 
 const customerLabel = (customer: { code: string; name: string }) => `${customer.code} · ${customer.name}`;
 
@@ -41,8 +43,14 @@ function useOptions(mode: Mode, search: string) {
   );
   const options = list.data?.items.map((row): Option =>
     "fullName" in row
-      ? { id: row.id, code: row.code, name: row.fullName, detail: row.position }
-      : { id: row.id, code: row.code, name: row.name, detail: row.phone },
+      ? { id: row.id, code: row.code, name: row.fullName, detail: row.position, tier: null }
+      : {
+          id: row.id,
+          code: row.code,
+          name: row.name,
+          detail: [CUSTOMER_TIER_LABELS[row.tier], row.phone].filter(Boolean).join(" · "),
+          tier: row.tier,
+        },
   );
   return { options, isPlaceholder: list.isPlaceholderData };
 }
@@ -116,8 +124,9 @@ export function RecipientPicker({
   invalid?: boolean;
   onSelect: (recipient: Recipient) => void;
 }) {
+  const can = useCan();
   const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>(isEmployee ? "employee" : "customer");
+  const [mode, setMode] = useState<Mode>(isEmployee && can("employees") ? "employee" : "customer");
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const { options, isPlaceholder } = useOptions(mode, search);
@@ -137,6 +146,7 @@ export function RecipientPicker({
       customerId: mode === "customer" ? option.id : null,
       employeeId: mode === "employee" ? option.id : null,
       label: customerLabel(option),
+      tier: mode === "customer" ? option.tier : null,
     });
 
   return (
@@ -167,13 +177,13 @@ export function RecipientPicker({
             name={typed}
             onCancel={() => setCreating(false)}
             onCreated={(customer) =>
-              finish({ customerId: customer.id, employeeId: null, label: customerLabel(customer) })
+              finish({ customerId: customer.id, employeeId: null, label: customerLabel(customer), tier: customer.tier })
             }
           />
         ) : (
           <>
             <div className="mb-2 grid grid-cols-2 gap-1 rounded-lg bg-muted p-1">
-              {(["customer", "employee"] as const).map((value) => (
+              {(can("employees") ? (["customer", "employee"] as const) : (["customer"] as const)).map((value) => (
                 <Button
                   key={value}
                   type="button"

@@ -11,6 +11,8 @@
     "run_worker_first": ["/api/*"]
   },
   "vars": { "APP_ENV": "production" },
+  // Dọn dẹp hằng đêm lúc 02:00 giờ Việt Nam (19:00 UTC): nhật ký cũ hơn 30 ngày, phiên hết hạn.
+  "triggers": { "crons": ["0 19 * * *"] },
   "d1_databases": [
     {
       "binding": "DB",

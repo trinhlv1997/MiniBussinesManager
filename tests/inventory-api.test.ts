@@ -68,6 +68,43 @@ beforeEach(async () => {
   ]);
 });
 
+describe("export prices by customer tier", () => {
+  const exportTo = async (recipient: object, unitPrice?: number) => {
+    const response = await post("/api/inventory/export", {
+      transactionDate: today,
+      confirm: false,
+      ...recipient,
+      lines: [{ productId: PEN, quantity: 1, unitPrice }],
+    });
+    expect(response.status).toBe(201);
+    return (await dataOf<InventoryTransactionDetail>(response)).lines[0]!.unitPrice;
+  };
+  const customerWith = async (tier: string) =>
+    (await env.DB.prepare("INSERT INTO customers (code, name, type, tier) VALUES (?, ?, 'business', ?) RETURNING id")
+      .bind(`KH-${tier}`, `Khách ${tier}`, tier)
+      .first<{ id: number }>())!.id;
+
+  it("uses the distributor, dealer or retail price when the line has no price", async () => {
+    await env.DB.prepare("UPDATE products SET distributor_price = 4000, dealer_price = 4500 WHERE id = ?").bind(PEN).run();
+    expect(await exportTo({ customerId: await customerWith("vip") })).toBe(4000);
+    expect(await exportTo({ customerId: await customerWith("normal") })).toBe(4500);
+    expect(await exportTo({ customerId: await customerWith("basic") })).toBe(5000);
+    // Xuất cho nhân viên hoặc chưa có người nhận: giá lẻ.
+    expect(await exportTo({ employeeId: EMPLOYEE })).toBe(5000);
+    expect(await exportTo({})).toBe(5000);
+  });
+
+  it("keeps a price typed by hand", async () => {
+    expect(await exportTo({ customerId: await customerWith("vip") }, 3500)).toBe(3500);
+  });
+
+  it("falls back to the retail price when a tier price is not set", async () => {
+    // Sản phẩm trong beforeEach không có giá đại lý / phân phối (NULL).
+    expect(await exportTo({ customerId: await customerWith("vip") })).toBe(5000);
+    expect(await exportTo({ customerId: await customerWith("normal") })).toBe(5000);
+  });
+});
+
 describe("export recipients", () => {
   const exportBody = (extra: object, confirm = true) => ({
     transactionDate: today,

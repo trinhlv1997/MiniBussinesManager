@@ -1,9 +1,11 @@
 import { and, asc, count, desc, eq, getTableColumns, gt, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { PRODUCT_STATUS_LABELS, STOCK_STATUS_LABELS, stockStatusOf, warrantyLabel } from "@shared/labels";
+import { priceForTier } from "@shared/pricing";
 import { toSearchText } from "@shared/text";
 import type { Product, ProductCategory, ProductDetail } from "@shared/types";
 import type { CategoryInput, ProductInput, ProductListQuery } from "@shared/validation/entities";
 import type { Db } from "../../db/client";
+import type { Actor } from "../env";
 import {
   inventoryBalances,
   inventoryTransactionItems,
@@ -121,15 +123,15 @@ export async function getProduct(db: Db, id: number): Promise<ProductDetail> {
   return { ...withStock(row), hasHistory: Boolean(row.hasHistory) };
 }
 
-export async function createProduct(db: Db, actorId: number, input: ProductInput) {
+export async function createProduct(db: Db, actor: Actor, input: ProductInput) {
   const sku = input.sku ?? (await nextCode(db, "products", "SP"));
   try {
     const [rows] = (await runBatch(db, [
       db
         .insert(products)
-        .values({ ...input, sku, searchText: searchTextOf(input, sku) })
+        .values({ ...input, sku, searchText: searchTextOf(input, sku), createdBy: actor.id, updatedBy: actor.id })
         .returning({ id: products.id }),
-      auditQuery(db, actorId, "product.create", "product", LAST_INSERT_ID, { sku }),
+      auditQuery(db, actor.id, "product.create", "product", LAST_INSERT_ID, { sku }),
     ])) as [{ id: number }[]];
     return getProduct(db, rows[0]!.id);
   } catch (error) {
@@ -138,16 +140,16 @@ export async function createProduct(db: Db, actorId: number, input: ProductInput
   }
 }
 
-export async function updateProduct(db: Db, actorId: number, id: number, input: ProductInput) {
+export async function updateProduct(db: Db, actor: Actor, id: number, input: ProductInput) {
   const existing = await getProduct(db, id);
   const sku = input.sku ?? existing.sku;
   try {
     await runBatch(db, [
       db
         .update(products)
-        .set({ ...input, sku, searchText: searchTextOf(input, sku) })
+        .set({ ...input, sku, searchText: searchTextOf(input, sku), updatedBy: actor.id })
         .where(live(id)),
-      auditQuery(db, actorId, "product.update", "product", String(id), { sku }),
+      auditQuery(db, actor.id, "product.update", "product", String(id), { sku }),
     ]);
   } catch (error) {
     rethrow(error);
@@ -155,12 +157,12 @@ export async function updateProduct(db: Db, actorId: number, id: number, input: 
   return getProduct(db, id);
 }
 
-export async function deleteProduct(db: Db, actorId: number, id: number) {
+export async function deleteProduct(db: Db, actor: Actor, id: number) {
   const existing = await getProduct(db, id);
   try {
     await runBatch(db, [
-      db.update(products).set({ deletedAt: new Date().toISOString() }).where(live(id)),
-      auditQuery(db, actorId, "product.delete", "product", String(id), { sku: existing.sku }),
+      db.update(products).set({ deletedAt: new Date().toISOString(), updatedBy: actor.id }).where(live(id)),
+      auditQuery(db, actor.id, "product.delete", "product", String(id), { sku: existing.sku }),
     ]);
   } catch (error) {
     if (dbErrorText(error).includes("PRODUCT_HAS_INVENTORY_HISTORY")) {
@@ -206,12 +208,12 @@ function rethrowCategory(error: unknown): never {
   throw error;
 }
 
-export async function createCategory(db: Db, actorId: number, input: CategoryInput) {
+export async function createCategory(db: Db, actor: Actor, input: CategoryInput) {
   const code = input.code ?? (await nextCode(db, "product_categories", "DM"));
   try {
     const [rows] = (await runBatch(db, [
-      db.insert(productCategories).values({ ...input, code }).returning({ id: productCategories.id }),
-      auditQuery(db, actorId, "category.create", "product_category", LAST_INSERT_ID, { code }),
+      db.insert(productCategories).values({ ...input, code, createdBy: actor.id, updatedBy: actor.id }).returning({ id: productCategories.id }),
+      auditQuery(db, actor.id, "category.create", "product_category", LAST_INSERT_ID, { code }),
     ])) as [{ id: number }[]];
     return getCategory(db, rows[0]!.id);
   } catch (error) {
@@ -220,13 +222,13 @@ export async function createCategory(db: Db, actorId: number, input: CategoryInp
   }
 }
 
-export async function updateCategory(db: Db, actorId: number, id: number, input: CategoryInput) {
+export async function updateCategory(db: Db, actor: Actor, id: number, input: CategoryInput) {
   const existing = await getCategory(db, id);
   const code = input.code ?? existing.code;
   try {
     await runBatch(db, [
-      db.update(productCategories).set({ ...input, code }).where(eq(productCategories.id, id)),
-      auditQuery(db, actorId, "category.update", "product_category", String(id), { code }),
+      db.update(productCategories).set({ ...input, code, updatedBy: actor.id }).where(eq(productCategories.id, id)),
+      auditQuery(db, actor.id, "category.update", "product_category", String(id), { code }),
     ]);
   } catch (error) {
     rethrowCategory(error);
@@ -234,7 +236,7 @@ export async function updateCategory(db: Db, actorId: number, id: number, input:
   return getCategory(db, id);
 }
 
-export async function deleteCategory(db: Db, actorId: number, id: number) {
+export async function deleteCategory(db: Db, actor: Actor, id: number) {
   const existing = await getCategory(db, id);
   if (existing.productCount > 0) {
     throw new ApiError(409, "CATEGORY_IN_USE", "Danh mục vẫn còn sản phẩm nên không thể xóa");
@@ -243,7 +245,7 @@ export async function deleteCategory(db: Db, actorId: number, id: number) {
     // Soft-deleted products have no stock history, so they can be removed for good.
     db.delete(products).where(and(eq(products.categoryId, id), isNotNull(products.deletedAt))),
     db.delete(productCategories).where(eq(productCategories.id, id)),
-    auditQuery(db, actorId, "category.delete", "product_category", String(id), {
+    auditQuery(db, actor.id, "category.delete", "product_category", String(id), {
       code: existing.code,
     }),
   ]);
@@ -258,7 +260,10 @@ export const PRODUCT_EXPORT: ExportColumn<Product>[] = [
   { header: "Bảo hành", value: (row) => warrantyLabel(row.warrantyMonths) },
   { header: "Đơn vị tính", value: (row) => row.unit },
   { header: "Giá nhập (VND)", value: (row) => row.costPrice },
-  { header: "Giá bán (VND)", value: (row) => row.salePrice },
+  // Giá thực áp dụng (để trống = bằng giá lẻ), để bảng tính luôn có số.
+  { header: "Giá phân phối (VND)", value: (row) => priceForTier(row, "vip") },
+  { header: "Giá đại lý (VND)", value: (row) => priceForTier(row, "normal") },
+  { header: "Giá khách lẻ (VND)", value: (row) => row.salePrice },
   { header: "Số lượng tồn", value: (row) => row.quantity },
   { header: "Tồn tối thiểu", value: (row) => row.minStock },
   { header: "Tình trạng tồn kho", value: (row) => STOCK_STATUS_LABELS[row.stockStatus] },

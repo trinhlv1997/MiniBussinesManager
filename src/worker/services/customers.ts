@@ -1,11 +1,14 @@
-import { and, asc, count, desc, eq, getTableColumns, gte, isNull, lt } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gte, isNull, lt, or, sql } from "drizzle-orm";
 import { formatDateTime, vnDayEndUtc, vnDayStartUtc } from "@shared/format";
 import { CUSTOMER_TIER_LABELS, CUSTOMER_TYPE_LABELS } from "@shared/labels";
+import { canAssignTier, seesAllCustomers } from "@shared/permissions";
 import { toSearchText } from "@shared/text";
 import type { Customer, CustomerDetail, CustomerNote } from "@shared/types";
 import type { CustomerInput, CustomerListQuery } from "@shared/validation/entities";
 import type { Db } from "../../db/client";
-import { customerNotes, customers } from "../../db/schema";
+import type { Actor } from "../env";
+import { customerNotes, customers, employees } from "../../db/schema";
+import { ApiError } from "../lib/errors";
 import type { ExportColumn } from "../lib/export";
 import {
   LAST_INSERT_ID,
@@ -21,7 +24,18 @@ import {
   toPage,
 } from "../lib/db";
 
-const columns = omit(getTableColumns(customers), ["searchText", "deletedAt"]);
+const tableColumns = omit(getTableColumns(customers), ["searchText", "deletedAt"]);
+/**
+ * Customer columns plus the care employee's code and name (left join, deleted employees hidden).
+ * The joined columns need their own aliases: D1 returns rows keyed by column name, so a bare
+ * `employees.code` would overwrite `customers.code` in the result.
+ */
+const columns = {
+  ...tableColumns,
+  careEmployeeCode: sql<string | null>`${employees.code}`.as("care_employee_code"),
+  careEmployeeName: sql<string | null>`${employees.fullName}`.as("care_employee_name"),
+};
+const careEmployeeJoin = and(eq(employees.id, customers.careEmployeeId), isNull(employees.deletedAt));
 const noteColumns = {
   id: customerNotes.id,
   content: customerNotes.content,
@@ -40,6 +54,19 @@ const SORT_COLUMNS = {
 const searchTextOf = (input: CustomerInput, code: string) =>
   toSearchText(code, input.name, input.contactName, input.phone, input.email, input.taxCode, input.address);
 
+async function assertCareEmployee(db: Db, employeeId: number | null) {
+  if (employeeId === null) return;
+  const [row] = await db
+    .select({ id: employees.id })
+    .from(employees)
+    .where(and(eq(employees.id, employeeId), isNull(employees.deletedAt)))
+    .limit(1);
+  if (!row) {
+    const message = "Nhân viên không tồn tại hoặc đã bị xóa";
+    throw new ApiError(422, "VALIDATION_ERROR", message, { careEmployeeId: message });
+  }
+}
+
 function rethrow(error: unknown): never {
   if (dbErrorText(error).includes("UNIQUE constraint failed")) {
     throw duplicate("code", "Mã khách hàng đã tồn tại");
@@ -47,11 +74,26 @@ function rethrow(error: unknown): never {
   throw error;
 }
 
-export async function listCustomers(db: Db, query: CustomerListQuery) {
+/**
+ * Phạm vi khách hàng theo vai trò (shared/permissions.ts): Admin thấy tất cả; Employee chỉ thấy khách
+ * được phân công cho hồ sơ nhân viên của mình hoặc khách do chính mình tạo. Khách ngoài phạm vi được
+ * xử lý như không tồn tại (404), để không lộ là có khách đó.
+ */
+function visibleTo(actor: Actor) {
+  if (seesAllCustomers(actor.role)) return undefined;
+  return or(
+    eq(customers.createdBy, actor.id),
+    actor.employeeId ? eq(customers.careEmployeeId, actor.employeeId) : undefined,
+  );
+}
+
+export async function listCustomers(db: Db, query: CustomerListQuery, actor: Actor) {
   const where = and(
     isNull(customers.deletedAt),
+    visibleTo(actor),
     query.type ? eq(customers.type, query.type) : undefined,
     query.tier ? eq(customers.tier, query.tier) : undefined,
+    query.careEmployeeId ? eq(customers.careEmployeeId, query.careEmployeeId) : undefined,
     query.search ? matchSearch(customers.searchText, query.search) : undefined,
     query.createdFrom ? gte(customers.createdAt, vnDayStartUtc(query.createdFrom)) : undefined,
     query.createdTo ? lt(customers.createdAt, vnDayEndUtc(query.createdTo)) : undefined,
@@ -62,6 +104,7 @@ export async function listCustomers(db: Db, query: CustomerListQuery) {
     db
       .select(columns)
       .from(customers)
+      .leftJoin(employees, careEmployeeJoin)
       .where(where)
       .orderBy(direction(SORT_COLUMNS[query.sort]), desc(customers.id))
       .limit(query.pageSize)
@@ -70,15 +113,23 @@ export async function listCustomers(db: Db, query: CustomerListQuery) {
   return toPage<Customer>(items, totals[0]?.total ?? 0, query);
 }
 
-async function findCustomer(db: Db, id: number): Promise<Customer> {
-  const [row] = await db.select(columns).from(customers).where(live(id)).limit(1);
+const visibleRow = (id: number, actor: Actor) => and(live(id), visibleTo(actor));
+
+async function findCustomer(db: Db, id: number, actor: Actor): Promise<Customer> {
+  const [row] = await db.select(columns).from(customers).leftJoin(employees, careEmployeeJoin).where(visibleRow(id, actor)).limit(1);
   if (!row) throw notFound("Không tìm thấy khách hàng");
   return row;
 }
 
-export async function getCustomer(db: Db, id: number): Promise<CustomerDetail> {
+/** Khách hàng có trong phạm vi của người thao tác không (dùng khi lập phiếu xuất). */
+export async function isCustomerVisible(db: Db, id: number, actor: Actor): Promise<boolean> {
+  const [row] = await db.select({ id: customers.id }).from(customers).where(visibleRow(id, actor)).limit(1);
+  return Boolean(row);
+}
+
+export async function getCustomer(db: Db, id: number, actor: Actor): Promise<CustomerDetail> {
   const [rows, notes] = await db.batch([
-    db.select(columns).from(customers).where(live(id)).limit(1),
+    db.select(columns).from(customers).leftJoin(employees, careEmployeeJoin).where(visibleRow(id, actor)).limit(1),
     db
       .select(noteColumns)
       .from(customerNotes)
@@ -91,69 +142,99 @@ export async function getCustomer(db: Db, id: number): Promise<CustomerDetail> {
   return { ...customer, notes };
 }
 
-export async function createCustomer(db: Db, actorId: number, input: CustomerInput) {
+/**
+ * Employee không chọn người chăm sóc: khách mới tự giao cho hồ sơ nhân viên của chính họ,
+ * và khi sửa thì giữ nguyên người chăm sóc hiện tại (chỉ Admin mới phân công lại).
+ */
+function careEmployeeFor(actor: Actor, input: CustomerInput, existing?: Customer): number | null {
+  if (seesAllCustomers(actor.role)) return input.careEmployeeId;
+  return existing ? existing.careEmployeeId : actor.employeeId;
+}
+
+/**
+ * Chỉ Admin được thêm khách VIP, nâng khách lên VIP hoặc đổi hạng của khách đang là VIP.
+ * Báo lỗi rõ ràng thay vì tự đổi giá trị, để người dùng biết vì sao.
+ */
+function assertTierAllowed(actor: Actor, tier: CustomerInput["tier"], existing?: Customer) {
+  if (existing && existing.tier === tier) return;
+  const blocked = !canAssignTier(actor.role, tier) || (existing && !canAssignTier(actor.role, existing.tier));
+  if (!blocked) return;
+  const message = existing && !canAssignTier(actor.role, existing.tier)
+    ? "Chỉ quản trị viên mới được thay đổi hạng của khách hàng VIP"
+    : "Chỉ quản trị viên mới được thêm hoặc nâng khách hàng lên hạng VIP";
+  throw new ApiError(403, "FORBIDDEN", message, { tier: message });
+}
+
+export async function createCustomer(db: Db, actor: Actor, input: CustomerInput) {
+  assertTierAllowed(actor, input.tier);
+  const careEmployeeId = careEmployeeFor(actor, input);
+  await assertCareEmployee(db, careEmployeeId);
   const code = input.code ?? (await nextCode(db, "customers", "KH"));
   try {
     const [rows] = (await runBatch(db, [
       db
         .insert(customers)
-        .values({ ...input, code, searchText: searchTextOf(input, code) })
-        .returning(columns),
-      auditQuery(db, actorId, "customer.create", "customer", LAST_INSERT_ID, { code }),
-    ])) as [Customer[]];
-    return rows[0];
+        .values({ ...input, careEmployeeId, code, searchText: searchTextOf(input, code), createdBy: actor.id, updatedBy: actor.id })
+        .returning({ id: customers.id }),
+      auditQuery(db, actor.id, "customer.create", "customer", LAST_INSERT_ID, { code }),
+    ])) as [{ id: number }[]];
+    return await findCustomer(db, rows[0]!.id, actor);
   } catch (error) {
     rethrow(error);
   }
 }
 
-export async function updateCustomer(db: Db, actorId: number, id: number, input: CustomerInput) {
-  const existing = await findCustomer(db, id);
+export async function updateCustomer(db: Db, actor: Actor, id: number, input: CustomerInput) {
+  const existing = await findCustomer(db, id, actor);
+  assertTierAllowed(actor, input.tier, existing);
+  const careEmployeeId = careEmployeeFor(actor, input, existing);
+  await assertCareEmployee(db, careEmployeeId);
   const code = input.code ?? existing.code;
   try {
-    const [rows] = (await runBatch(db, [
+    await runBatch(db, [
       db
         .update(customers)
-        .set({ ...input, code, searchText: searchTextOf(input, code) })
-        .where(live(id))
-        .returning(columns),
-      auditQuery(db, actorId, "customer.update", "customer", String(id), { code }),
-    ])) as [Customer[]];
-    return rows[0];
+        .set({ ...input, careEmployeeId, code, searchText: searchTextOf(input, code), updatedBy: actor.id })
+        .where(live(id)),
+      auditQuery(db, actor.id, "customer.update", "customer", String(id), { code }),
+    ]);
+    // Admin có thể đã giao khách cho người khác: đọc lại không theo phạm vi để vẫn trả kết quả.
+    return await findCustomer(db, id, { ...actor, role: "admin" });
   } catch (error) {
     rethrow(error);
   }
 }
 
-export async function deleteCustomer(db: Db, actorId: number, id: number) {
-  const existing = await findCustomer(db, id);
+export async function deleteCustomer(db: Db, actor: Actor, id: number) {
+  const existing = await findCustomer(db, id, actor);
   await runBatch(db, [
-    db.update(customers).set({ deletedAt: new Date().toISOString() }).where(live(id)),
-    auditQuery(db, actorId, "customer.delete", "customer", String(id), { code: existing.code }),
+    db.update(customers).set({ deletedAt: new Date().toISOString(), updatedBy: actor.id }).where(live(id)),
+    auditQuery(db, actor.id, "customer.delete", "customer", String(id), { code: existing.code }),
   ]);
 }
 
 export async function addCustomerNote(
   db: Db,
-  actorId: number,
+  actor: Actor,
   customerId: number,
   content: string,
 ): Promise<CustomerNote | undefined> {
-  await findCustomer(db, customerId);
+  const customer = await findCustomer(db, customerId, actor);
   const [rows] = (await runBatch(db, [
-    db.insert(customerNotes).values({ customerId, content }).returning(noteColumns),
-    auditQuery(db, actorId, "customer.note_add", "customer", String(customerId)),
+    db.insert(customerNotes).values({ customerId, content, createdBy: actor.id }).returning(noteColumns),
+    auditQuery(db, actor.id, "customer.note_add", "customer", String(customerId), { code: customer.code }),
   ])) as [CustomerNote[]];
   return rows[0];
 }
 
-export async function deleteCustomerNote(db: Db, actorId: number, customerId: number, noteId: number) {
+export async function deleteCustomerNote(db: Db, actor: Actor, customerId: number, noteId: number) {
+  const customer = await findCustomer(db, customerId, actor);
   const where = and(eq(customerNotes.id, noteId), eq(customerNotes.customerId, customerId));
   const [note] = await db.select({ id: customerNotes.id }).from(customerNotes).where(where).limit(1);
   if (!note) throw notFound("Không tìm thấy ghi chú");
   await runBatch(db, [
     db.delete(customerNotes).where(where),
-    auditQuery(db, actorId, "customer.note_delete", "customer", String(customerId)),
+    auditQuery(db, actor.id, "customer.note_delete", "customer", String(customerId), { code: customer.code }),
   ]);
 }
 
@@ -162,6 +243,10 @@ export const CUSTOMER_EXPORT: ExportColumn<Customer>[] = [
   { header: "Tên khách hàng", value: (row) => row.name },
   { header: "Loại khách hàng", value: (row) => CUSTOMER_TYPE_LABELS[row.type] },
   { header: "Hạng khách hàng", value: (row) => CUSTOMER_TIER_LABELS[row.tier] },
+  {
+    header: "Nhân viên chăm sóc",
+    value: (row) => (row.careEmployeeCode ? `${row.careEmployeeCode} · ${row.careEmployeeName}` : null),
+  },
   { header: "Người liên hệ", value: (row) => row.contactName },
   { header: "Số điện thoại", value: (row) => row.phone },
   { header: "Email", value: (row) => row.email },

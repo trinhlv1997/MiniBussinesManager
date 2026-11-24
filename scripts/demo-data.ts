@@ -50,8 +50,10 @@ const CUSTOMERS = [
 /** Lương cơ bản/tháng (VND), cùng thứ tự với EMPLOYEES. */
 const BASE_SALARIES = [35_000_000, 22_000_000, 20_000_000, 12_000_000, 10_000_000, 11_000_000, 7_500_000, 8_500_000, 14_000_000, 9_000_000];
 
-/** Mã khách hàng hạng VIP (khách doanh nghiệp mua nhiều trong dữ liệu mẫu). */
+/** Nhà phân phối (VIP): khách doanh nghiệp mua nhiều trong dữ liệu mẫu. */
 const VIP_CUSTOMERS = new Set(["KH0001", "KH0004", "KH0007", "KH0013"]);
+/** Nhân viên chăm sóc (id trong EMPLOYEES): trưởng phòng KD lo nhà phân phối, KD dự án / KD đại lý lo đại lý, CSKH lo khách lẻ. */
+const CARE = { vip: 3, dealers: [4, 6], retail: 8 } as const;
 
 const CATEGORIES = [
   ["Thiết bị đóng cắt", "Aptomat, cầu dao, contactor và tủ điện"],
@@ -60,6 +62,11 @@ const CATEGORIES = [
   ["Điện gia dụng", "Quạt, nồi cơm, ấm đun và thiết bị gia đình"],
   ["Thiết bị điện tử", "Thiết bị mạng, camera, bộ lưu điện và phụ kiện"],
 ] as const;
+
+/** Giá đại lý / phân phối mẫu: một tỷ lệ của giá lẻ, làm tròn nghìn đồng, không thấp hơn giá nhập. */
+const DEALER_RATE = 0.9;
+const DISTRIBUTOR_RATE = 0.82;
+const tierPrice = (sale: number, rate: number, cost: number) => Math.max(Math.round((sale * rate) / 1000) * 1000, cost);
 
 type DemoProduct = {
   sku: string;
@@ -210,13 +217,14 @@ export function buildDemoSql(today: string): string {
     ),
     insert(
       "customers",
-      ["id", "code", "name", "type", "tier", "contact_name", "phone", "email", "address", "tax_code", "search_text", "created_at", "updated_at"],
+      ["id", "code", "name", "type", "tier", "care_employee_id", "contact_name", "phone", "email", "address", "tax_code", "search_text", "created_at", "updated_at"],
       CUSTOMERS.map(([name, type, contact, phone, address, taxCode], index) => {
         const code = `KH${pad(index + 1)}`;
         const email = `kh${pad(index + 1)}@khachhang.example`;
         const createdAt = vnDayStartUtc(addDays(today, -(80 - index * 4)));
-        const tier = VIP_CUSTOMERS.has(code) ? "vip" : "normal";
-        return [index + 1, code, name, type, tier, contact, phone, email, address, taxCode, toSearchText(code, name, contact, phone, email, taxCode, address), createdAt, createdAt];
+        const tier = VIP_CUSTOMERS.has(code) ? "vip" : type === "business" ? "normal" : "basic";
+        const care = tier === "vip" ? CARE.vip : tier === "normal" ? CARE.dealers[index % 2]! : CARE.retail;
+        return [index + 1, code, name, type, tier, care, contact, phone, email, address, taxCode, toSearchText(code, name, contact, phone, email, taxCode, address), createdAt, createdAt];
       }),
     ),
     insert(
@@ -235,7 +243,7 @@ export function buildDemoSql(today: string): string {
     ),
     insert(
       "products",
-      ["id", "sku", "name", "category_id", "brand", "specifications", "warranty_months", "unit", "cost_price", "sale_price", "min_stock", "search_text"],
+      ["id", "sku", "name", "category_id", "brand", "specifications", "warranty_months", "unit", "cost_price", "sale_price", "dealer_price", "distributor_price", "min_stock", "search_text"],
       PRODUCTS.map((product, index) => [
         index + 1,
         product.sku,
@@ -247,6 +255,8 @@ export function buildDemoSql(today: string): string {
         product.unit,
         product.cost,
         product.sale,
+        tierPrice(product.sale, DEALER_RATE, product.cost),
+        tierPrice(product.sale, DISTRIBUTOR_RATE, product.cost),
         minStockOf(index),
         toSearchText(product.sku, product.name, product.brand, product.specifications),
       ]),

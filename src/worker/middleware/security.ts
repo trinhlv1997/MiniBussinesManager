@@ -1,4 +1,5 @@
 import { createMiddleware } from "hono/factory";
+import { canAccess, type Module } from "@shared/permissions";
 import { createDb } from "../../db/client";
 import type { AppEnv } from "../env";
 import { ApiError } from "../lib/errors";
@@ -44,3 +45,12 @@ export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
   c.set("sessionId", session.sessionId);
   await next();
 });
+
+/** Chặn API của một chức năng khi vai trò của tài khoản không được phép (xem shared/permissions.ts). */
+export const requireModule = (module: Module) =>
+  createMiddleware<AppEnv>(async (c, next) => {
+    if (!canAccess(c.get("admin").role, module)) {
+      throw new ApiError(403, "FORBIDDEN", "Bạn không có quyền sử dụng chức năng này");
+    }
+    await next();
+  });

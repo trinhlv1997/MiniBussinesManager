@@ -22,7 +22,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-import { useLogout, useSession } from "@/features/auth/use-auth";
+import { ROLE_LABELS } from "@shared/permissions";
+import { useCan, useLogout, useSession } from "@/features/auth/use-auth";
 import { useTheme } from "@/hooks/use-theme";
 
 function initialsOf(name: string) {
@@ -35,11 +36,13 @@ function initialsOf(name: string) {
 function AppBreadcrumb() {
   const { pathname } = useLocation();
   const current = findNavigationItem(pathname);
+  const can = useCan();
 
   return (
     <Breadcrumb>
       <BreadcrumbList>
-        {current && current.path !== "/" && (
+        {/* Vai trò không có Tổng quan (Nhân viên) thì không hiện mục này. */}
+        {current && current.path !== "/" && can("dashboard") && (
           <>
             <BreadcrumbItem className="hidden sm:block">
               <BreadcrumbLink asChild>
@@ -93,13 +96,16 @@ export function AppHeader() {
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel className="font-normal">
               <p className="truncate text-sm font-medium text-foreground">{admin?.displayName}</p>
-              <p className="truncate text-xs text-muted-foreground">{admin?.username}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {admin?.username}
+                {admin && ` · ${ROLE_LABELS[admin.role]}`}
+              </p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link to="/cai-dat">
+              <Link to="/tai-khoan">
                 <KeyRound aria-hidden />
-                Đổi mật khẩu
+                Tài khoản và mật khẩu
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem disabled={logout.isPending} onSelect={handleLogout}>

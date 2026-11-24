@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AdminProfile } from "@shared/api";
+import { canAccess, type Module } from "@shared/permissions";
 import type { ChangePasswordInput, LoginInput } from "@shared/validation/auth";
 import { ApiClientError, apiRequest } from "@/lib/api";
 
@@ -44,4 +45,10 @@ export function useChangePassword() {
     mutationFn: (input: ChangePasswordInput) =>
       apiRequest<null>("/auth/change-password", { body: input }),
   });
+}
+
+/** Kiểm tra quyền theo chức năng cho tài khoản đang đăng nhập (giao diện chỉ ẩn/hiện; server mới là nơi chặn thật). */
+export function useCan() {
+  const { data } = useSession();
+  return (module: Module) => canAccess(data?.role, module);
 }

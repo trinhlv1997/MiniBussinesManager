@@ -5,7 +5,8 @@ import { toSearchText } from "@shared/text";
 import type { Employee, EmployeeDetail } from "@shared/types";
 import type { EmployeeInput, EmployeeListQuery } from "@shared/validation/entities";
 import type { Db } from "../../db/client";
-import { employees } from "../../db/schema";
+import type { Actor } from "../env";
+import { customers, employees } from "../../db/schema";
 import type { ExportColumn } from "../lib/export";
 import {
   LAST_INSERT_ID,
@@ -70,15 +71,15 @@ export async function getEmployee(db: Db, id: number): Promise<EmployeeDetail> {
   return row;
 }
 
-export async function createEmployee(db: Db, actorId: number, input: EmployeeInput) {
+export async function createEmployee(db: Db, actor: Actor, input: EmployeeInput) {
   const code = input.code ?? (await nextCode(db, "employees", "NV"));
   try {
     const [rows] = (await runBatch(db, [
       db
         .insert(employees)
-        .values({ ...input, code, searchText: searchTextOf(input, code) })
+        .values({ ...input, code, searchText: searchTextOf(input, code), createdBy: actor.id, updatedBy: actor.id })
         .returning(detailColumns),
-      auditQuery(db, actorId, "employee.create", "employee", LAST_INSERT_ID, { code }),
+      auditQuery(db, actor.id, "employee.create", "employee", LAST_INSERT_ID, { code }),
     ])) as [EmployeeDetail[]];
     return rows[0];
   } catch (error) {
@@ -86,17 +87,17 @@ export async function createEmployee(db: Db, actorId: number, input: EmployeeInp
   }
 }
 
-export async function updateEmployee(db: Db, actorId: number, id: number, input: EmployeeInput) {
+export async function updateEmployee(db: Db, actor: Actor, id: number, input: EmployeeInput) {
   const existing = await getEmployee(db, id);
   const code = input.code ?? existing.code;
   try {
     const [rows] = (await runBatch(db, [
       db
         .update(employees)
-        .set({ ...input, code, searchText: searchTextOf(input, code) })
+        .set({ ...input, code, searchText: searchTextOf(input, code), updatedBy: actor.id })
         .where(live(id))
         .returning(detailColumns),
-      auditQuery(db, actorId, "employee.update", "employee", String(id), { code }),
+      auditQuery(db, actor.id, "employee.update", "employee", String(id), { code }),
     ])) as [EmployeeDetail[]];
     return rows[0];
   } catch (error) {
@@ -104,11 +105,13 @@ export async function updateEmployee(db: Db, actorId: number, id: number, input:
   }
 }
 
-export async function deleteEmployee(db: Db, actorId: number, id: number) {
+export async function deleteEmployee(db: Db, actor: Actor, id: number) {
   const existing = await getEmployee(db, id);
   await runBatch(db, [
-    db.update(employees).set({ deletedAt: new Date().toISOString() }).where(live(id)),
-    auditQuery(db, actorId, "employee.delete", "employee", String(id), { code: existing.code }),
+    db.update(employees).set({ deletedAt: new Date().toISOString(), updatedBy: actor.id }).where(live(id)),
+    // Nhân viên bị xoá (mềm) thì khách hàng họ chăm sóc trở về "chưa phân công".
+    db.update(customers).set({ careEmployeeId: null }).where(eq(customers.careEmployeeId, id)),
+    auditQuery(db, actor.id, "employee.delete", "employee", String(id), { code: existing.code }),
   ]);
 }
 

@@ -78,7 +78,7 @@ export const reportRoutes = new Hono<AppEnv>()
       createdFrom: from,
       createdTo: to,
     };
-    const { items, pagination } = await listCustomers(createDb(c.env.DB), query);
+    const { items, pagination } = await listCustomers(createDb(c.env.DB), query, c.get("admin"));
     return excelResponse(c, { fileName: "bao-cao-khach-hang", sheetName: "Báo cáo khách hàng", columns: CUSTOMER_EXPORT, rows: items, total: pagination.total });
   })
   .get("/products/export", async (c) => {

@@ -50,8 +50,9 @@ export const EmployeeStatusBadge = ({ status }: { status: EmployeeStatus }) => (
 export const CustomerTypeBadge = ({ type }: { type: CustomerType }) => (
   <StatusBadge tone={type === "business" ? "info" : "neutral"}>{CUSTOMER_TYPE_LABELS[type]}</StatusBadge>
 );
+const TIER_TONES: Record<CustomerTier, Tone> = { vip: "warning", normal: "info", basic: "neutral" };
 export const CustomerTierBadge = ({ tier }: { tier: CustomerTier }) => (
-  <StatusBadge tone={tier === "vip" ? "warning" : "neutral"}>
+  <StatusBadge tone={TIER_TONES[tier]}>
     {tier === "vip" ? "★ " : ""}
     {CUSTOMER_TIER_LABELS[tier]}
   </StatusBadge>

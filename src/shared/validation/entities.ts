@@ -14,6 +14,7 @@ import {
   optionalDate,
   optionalEmail,
   optionalImage,
+  optionalId,
   optionalMoney,
   optionalPhone,
   optionalText,
@@ -50,6 +51,7 @@ export const customerSchema = z.object({
   name: requiredText("tên khách hàng", 200),
   type: z.enum(CUSTOMER_TYPES, "Loại khách hàng không hợp lệ"),
   tier: z.enum(CUSTOMER_TIERS, "Hạng khách hàng không hợp lệ").default("normal"),
+  careEmployeeId: optionalId,
   contactName: optionalText(120),
   phone: optionalPhone,
   email: optionalEmail,
@@ -71,6 +73,7 @@ export const customerListQuery = z.object({
   ...pageQuery,
   type: queryEnum(CUSTOMER_TYPES),
   tier: queryEnum(CUSTOMER_TIERS),
+  careEmployeeId: queryId,
   createdFrom: queryDate,
   createdTo: queryDate,
   sort: sortQuery(["code", "name", "type", "tier", "createdAt"], "createdAt"),
@@ -89,6 +92,9 @@ export const productSchema = z.object({
   unit: requiredText("đơn vị tính", 20),
   costPrice: money,
   salePrice: money,
+  /** Bỏ trống thì server lấy bằng giá khách lẻ. */
+  dealerPrice: optionalMoney,
+  distributorPrice: optionalMoney,
   minStock: z
     .number("Vui lòng nhập số lượng")
     .int("Số lượng phải là số nguyên")

@@ -1,6 +1,6 @@
 # Mini Business Manager
 
-Phần mềm quản lý nội bộ cho công ty nhỏ khoảng 10 nhân viên, chạy trên Cloudflare Workers và D1. Giao diện hoàn toàn bằng tiếng Việt, chỉ có một tài khoản quản trị.
+Phần mềm quản lý nội bộ cho công ty nhỏ khoảng 10 nhân viên, chạy trên Cloudflare Workers và D1. Giao diện hoàn toàn bằng tiếng Việt, nhiều tài khoản đăng nhập với phân quyền theo vai trò (Admin / Nhân viên).
 
 Các module: Tổng quan, Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Cài đặt.
 
@@ -14,7 +14,7 @@ npm run setup   # tạo .dev.vars, chạy migration, tạo tài khoản và dữ
 npm run dev
 ```
 
-Tài khoản demo chỉ dành cho phát triển: `admin` / `admin`. Lệnh tạo tài khoản production từ chối mật khẩu này và yêu cầu mật khẩu từ 12 ký tự.
+Tài khoản demo chỉ dành cho phát triển: `admin` / `admin` (Admin) và `nhanvien` / `nhanvien` (Nhân viên, gắn với NV0006). Lệnh tạo tài khoản production từ chối mật khẩu demo và yêu cầu mật khẩu từ 12 ký tự.
 
 Dữ liệu demo mô phỏng một công ty thiết bị điện và điện tử, gồm 1 công ty, 10 nhân viên, 20 khách hàng, 5 danh mục, 30 sản phẩm và 20 phiếu kho. Tên thương hiệu và giá chỉ là dữ liệu mẫu. Chạy lại `npm run db:seed:local` là an toàn: dữ liệu đã có được giữ nguyên.
 
@@ -100,9 +100,37 @@ npx wrangler d1 create mini-business-manager
    npm run db:seed:demo:remote
    ```
 
-Chạy lại `admin:create:remote` sẽ đặt lại mật khẩu quản trị và đăng xuất mọi thiết bị, nên đây cũng là cách khôi phục khi quên mật khẩu.
+Chạy lại `admin:create:remote` sẽ đặt lại mật khẩu của tài khoản số 1, đưa nó về Admin đang hoạt động và đăng xuất mọi thiết bị, nên đây cũng là cách khôi phục khi quên mật khẩu hoặc lỡ khoá hết tài khoản Admin. Các tài khoản khác do Admin tạo trong màn hình **Người dùng**.
 
 Sau lần deploy đầu, hãy thử đăng nhập, đổi mật khẩu và xuất một file Excel lớn để xác nhận các thao tác này nằm trong giới hạn CPU của gói Free.
+
+## Phân quyền và nhật ký hoạt động
+
+Quyền được định nghĩa ở một chỗ duy nhất, `src/shared/permissions.ts`, dùng cho cả server (chặn API) và giao diện (ẩn menu, chuyển trang).
+
+| Vai trò | Được dùng |
+| --- | --- |
+| **Admin** | Toàn bộ hệ thống, gồm Người dùng, Nhật ký hoạt động, Cài đặt |
+| **Nhân viên** | Khách hàng, Sản phẩm, Quản lý kho. Chỉ thấy khách hàng được phân công cho hồ sơ nhân viên của mình (ô Nhân viên chăm sóc) hoặc do chính mình tạo; khách ngoài phạm vi trả về "không tìm thấy". Khách mới tự giao cho chính mình; chỉ Admin phân công lại. Không được thêm khách VIP (Nhà phân phối), nâng khách lên VIP hay đổi hạng của khách VIP. Phiếu xuất chỉ cho khách trong phạm vi, không xuất cho nhân viên khác. |
+
+- **Người dùng** (Admin): tạo tài khoản, chọn vai trò, gắn với hồ sơ nhân viên (mỗi nhân viên tối đa một tài khoản), khoá / mở khoá, đặt lại mật khẩu. Tài khoản không bị xoá để nhật ký giữ tên người làm. Hệ thống luôn giữ ít nhất một Admin đang hoạt động; không ai tự khoá hay tự hạ quyền mình.
+- **Ai làm, lúc nào:** nhân viên, khách hàng, sản phẩm, danh mục lưu `created_by` / `updated_by`; phiếu kho thêm `confirmed_by`. Cửa sổ chi tiết hiện "Tạo bởi … · thời gian" và "Sửa lần cuối …"; danh sách phiếu kho có cột Người lập. Dữ liệu cũ được điền lại từ nhật ký khi chạy migration 0010.
+- **Nhật ký hoạt động** (Admin): mọi thao tác thêm / sửa / xoá, lập / xác nhận / huỷ / đảo ngược phiếu, đăng nhập, đổi mật khẩu, quản lý tài khoản; lọc theo người, đối tượng, khoảng ngày; xuất Excel. Admin còn thấy "Lịch sử thay đổi" trong cửa sổ chi tiết từng bản ghi.
+- **Nhật ký chỉ giữ 30 ngày gần nhất** (`AUDIT_RETENTION_DAYS` trong `src/shared/audit.ts`). Cron Trigger trong `wrangler.jsonc` chạy lúc 02:00 giờ Việt Nam mỗi ngày (`scheduled` trong `src/worker/index.ts`), xoá nhật ký cũ hơn 30 ngày cùng phiên đăng nhập hết hạn. Người tạo / sửa cuối trên bản ghi và lần đăng nhập cuối của tài khoản lưu riêng nên không mất. Cần giữ lâu hơn thì xuất Excel nhật ký trước khi hết hạn. Cron chỉ chạy trên bản đã deploy; khi phát triển, test `tests/maintenance.test.ts` gọi trực tiếp tác vụ này.
+- Mọi tài khoản tự đổi mật khẩu ở **Tài khoản của tôi** (menu ở góc phải).
+
+Thêm vai trò mới: khai báo trong `ROLES`, `ROLE_LABELS`, `ROLE_MODULES` của `src/shared/permissions.ts` và cập nhật CHECK `admin_users_role_check` bằng một migration.
+
+## Khách hàng: hạng và nhân viên chăm sóc
+
+- **Hạng khách hàng** theo kênh bán: **VIP (Nhà phân phối)**, **Bình thường (Đại lý)**, **Cơ bản (Khách lẻ)**. Khách mới mặc định là Bình thường. Sắp xếp cột Hạng giảm dần để đưa nhà phân phối lên đầu.
+- **Nhân viên chăm sóc** (không bắt buộc): chọn trong form khách hàng, lọc danh sách theo nhân viên, xem ở cột "NV chăm sóc", trong file Excel, và mục "Khách hàng phụ trách" ở chi tiết nhân viên. Xoá một nhân viên thì các khách họ phụ trách trở về "Chưa phân công".
+
+## Giá bán theo hạng khách hàng
+
+Mỗi sản phẩm có **Giá phân phối**, **Giá đại lý** và **Giá khách lẻ**. Để trống giá phân phối / đại lý nghĩa là bằng giá lẻ (lưu NULL, tính lúc dùng, nên đổi giá lẻ thì hai giá này đổi theo).
+
+Khi lập phiếu xuất, đơn giá tự điền theo hạng của khách nhận hàng: VIP → giá phân phối, Bình thường → giá đại lý, Cơ bản → giá lẻ; xuất cho nhân viên dùng giá lẻ. Đổi khách thì các dòng tự cập nhật, trừ dòng đã gõ giá tay (xoá trống ô giá để quay về giá theo hạng). Server áp dụng cùng quy tắc (`src/shared/pricing.ts`) khi một dòng không có đơn giá.
 
 ## Xuất Excel
 
@@ -166,7 +194,8 @@ Theo tài liệu Cloudflare, kiểm tra ngày 18/11/2026. Hãy xem lại trướ
 - Mật khẩu băm bằng PBKDF2-SHA256 với salt riêng và khóa bí mật `PASSWORD_PEPPER` nằm ngoài database.
 - Số vòng lặp là 25.000 để nằm trong giới hạn CPU của gói Free. Mức này thấp hơn khuyến nghị cho PBKDF2 dùng đơn lẻ, nên khóa bí mật là bắt buộc. Có thể tăng `PBKDF2_ITERATIONS` khi dùng gói trả phí; mật khẩu cũ vẫn đăng nhập được.
 - Phiên đăng nhập dùng cookie `HttpOnly`, `SameSite=Strict`, thêm `Secure` và tiền tố `__Host-` trên production. Database chỉ lưu mã băm của token.
-- Mọi API đều yêu cầu đăng nhập, trừ `/api/health` và `/api/auth/login`. Request thay đổi dữ liệu phải có `Origin` đúng tên miền.
+- Mọi API đều yêu cầu đăng nhập, trừ `/api/health` và `/api/auth/login`, và được chặn theo vai trò ở server (`requireModule`), không chỉ ẩn trên giao diện. Request thay đổi dữ liệu phải có `Origin` đúng tên miền.
+- Tài khoản bị khoá không đăng nhập được và mất phiên ngay lập tức; đặt lại mật khẩu đăng xuất người đó khỏi mọi thiết bị.
 - Đăng nhập giới hạn 5 lần mỗi 15 phút theo IP và 20 lần theo tài khoản.
 - Toàn bộ dữ liệu vào được kiểm tra ở backend, truy vấn dùng tham số ràng buộc, và file Excel ghi mọi ô chữ dưới dạng văn bản nên không chạy được công thức chèn vào.
 

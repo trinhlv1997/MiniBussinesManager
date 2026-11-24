@@ -57,6 +57,34 @@
       "when": 1795269483222,
       "tag": "0007_customer_tier_employee_salary",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1795507140515,
+      "tag": "0008_customer_tier_levels_care_employee",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1795507945146,
+      "tag": "0009_product_tier_prices",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1795508825711,
+      "tag": "0010_user_roles_authorship",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1795511169591,
+      "tag": "0011_user_last_login",
+      "breakpoints": true
     }
   ]
 }

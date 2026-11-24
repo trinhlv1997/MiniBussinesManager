@@ -1,6 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { formatDate, formatDateTime, formatVnd } from "@shared/format";
+import { formatDate, formatVnd } from "@shared/format";
 import { EMPLOYEE_STATUS_LABELS } from "@shared/labels";
 import type { EmployeeDetail } from "@shared/types";
 import {
@@ -15,8 +15,11 @@ import { optionsFrom } from "@/components/common/list-controls";
 import { ErrorState, PageSkeleton } from "@/components/common/states";
 import { EmployeeStatusBadge } from "@/components/common/status";
 import { RecipientDocuments } from "@/features/inventory/recipient-documents";
+import { CaredCustomers } from "./cared-customers";
 import { useSaveForm } from "@/hooks/use-save-form";
 import { useResourceDetail, useSaveResource } from "@/lib/resource";
+import { RecordHistory } from "@/features/audit/record-history";
+import { useAuthorshipItems } from "@/features/users/use-user-names";
 
 export const EMPLOYEES = { key: "employees", path: "/employees" };
 
@@ -104,6 +107,7 @@ export function EmployeeFormDialog({ id, onClose }: { id?: number; onClose: () =
 
 export function EmployeeDetailDialog({ id, onClose }: { id: number; onClose: () => void }) {
   const { data, error } = useDetail(id);
+  const authorship = useAuthorshipItems();
   return (
     <AppDialog open onClose={onClose} title={data?.fullName ?? "Chi tiết nhân viên"}>
       {error && <ErrorState description={error.message} />}
@@ -121,11 +125,13 @@ export function EmployeeDetailDialog({ id, onClose }: { id: number; onClose: () 
               ["Ngày vào làm", formatDate(data.hireDate)],
               ["Lương cơ bản", data.baseSalary === null ? null : `${formatVnd(data.baseSalary)}/tháng`],
               ["Địa chỉ", data.address],
-              ["Cập nhật lần cuối", formatDateTime(data.updatedAt)],
+              ...authorship(data),
               ["Ghi chú", data.note],
             ]}
           />
+          <CaredCustomers employeeId={data.id} />
           <RecipientDocuments filter={{ employeeId: data.id }} />
+          <RecordHistory entityType="employee" entityId={data.id} />
         </div>
       )}
     </AppDialog>

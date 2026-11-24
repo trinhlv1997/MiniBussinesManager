@@ -1,5 +1,6 @@
 import { NavLink, useLocation } from "react-router";
-import { NAVIGATION, findNavigationItem } from "@/app/navigation";
+import { findNavigationItem, visibleNavigation } from "@/app/navigation";
+import { useSession } from "@/features/auth/use-auth";
 import { useSettings } from "@/features/settings/use-settings";
 import {
   Sidebar,
@@ -19,6 +20,7 @@ export function AppSidebar() {
   const { setOpenMobile } = useSidebar();
   const activePath = findNavigationItem(pathname)?.path;
   const { data: settings } = useSettings();
+  const session = useSession();
 
   return (
     <Sidebar collapsible="icon">
@@ -34,7 +36,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {NAVIGATION.map(({ path, label, icon: Icon }) => (
+              {visibleNavigation(session.data?.role).map(({ path, label, icon: Icon }) => (
                 <SidebarMenuItem key={path}>
                   <SidebarMenuButton
                     asChild
