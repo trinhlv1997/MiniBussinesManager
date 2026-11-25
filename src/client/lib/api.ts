@@ -1,3 +1,4 @@
+import { BASE_PATH } from "@shared/base-path";
 import type { ApiResponse } from "@shared/api";
 
 export class ApiClientError extends Error {
@@ -19,7 +20,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, {
+    response = await fetch(`${BASE_PATH}/api${path}`, {
       method: options.method ?? (options.body === undefined ? "GET" : "POST"),
       credentials: "same-origin",
       headers: options.body === undefined ? undefined : { "Content-Type": "application/json" },

@@ -7,6 +7,12 @@ import { Toaster } from "@/components/ui/sonner";
 import { SESSION_KEY } from "@/features/auth/use-auth";
 import { ApiClientError } from "@/lib/api";
 import "./index.css";
+import { BASE_PATH } from "@shared/base-path";
+
+// Ứng dụng chỉ chạy dưới BASE_PATH; mở thẳng gốc tên miền (vd: workers.dev, vite dev) thì chuyển vào đó.
+if (window.location.pathname !== BASE_PATH && !window.location.pathname.startsWith(`${BASE_PATH}/`)) {
+  window.location.replace(`${BASE_PATH}/`);
+}
 
 // An expired session anywhere sends the user back to the login page.
 function handleExpiredSession(error: Error) {

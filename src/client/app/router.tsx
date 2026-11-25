@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { Navigate, createBrowserRouter, useRouteError } from "react-router";
+import { BASE_PATH } from "@shared/base-path";
 import type { Module } from "@shared/permissions";
 import { ErrorState, PageSkeleton } from "@/components/common/states";
 import { AppLayout } from "@/components/layout/app-layout";
@@ -18,6 +19,7 @@ const NotFoundPage = lazy(() => import("@/pages/not-found-page"));
 const AccountPage = lazy(() => import("@/pages/account-page"));
 const UsersPage = lazy(() => import("@/pages/users-page"));
 const AuditPage = lazy(() => import("@/pages/audit-page"));
+const GuidePage = lazy(() => import("@/pages/guide-page"));
 
 /** Trang không thuộc quyền của vai trò thì chuyển về trang đầu tiên được phép (server vẫn tự chặn API). */
 function Guard({ module, children }: { module: Module; children: React.ReactNode }) {
@@ -61,8 +63,9 @@ export const router = createBrowserRouter([
       { path: "/nguoi-dung", element: <Guard module="users"><UsersPage /></Guard> },
       { path: "/nhat-ky", element: <Guard module="audit"><AuditPage /></Guard> },
       { path: "/cai-dat", element: <Guard module="settings"><SettingsPage /></Guard> },
+      { path: "/huong-dan", element: <GuidePage /> },
       { path: "/tai-khoan", element: <AccountPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },
-]);
+], { basename: BASE_PATH });

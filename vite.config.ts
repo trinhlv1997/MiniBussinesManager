@@ -8,6 +8,8 @@ const path = (relative: string) => fileURLToPath(new URL(relative, import.meta.u
 
 export default defineConfig({
   plugins: [react(), tailwindcss(), cloudflare()],
+  // File tĩnh nằm dưới /management/assets để cùng tên miền với website bán hàng (src/shared/base-path.ts).
+  build: { assetsDir: "management/assets" },
   resolve: {
     alias: {
       "@shared": path("./src/shared"),

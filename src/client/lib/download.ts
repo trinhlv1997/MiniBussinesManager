@@ -1,3 +1,4 @@
+import { BASE_PATH } from "@shared/base-path";
 import { vnToday } from "@shared/format";
 import type { ApiFailure } from "@shared/api";
 import { ApiClientError } from "./api";
@@ -6,7 +7,7 @@ import { ApiClientError } from "./api";
 export async function downloadExcel(path: string, fileName: string): Promise<{ truncated: boolean }> {
   let response: Response;
   try {
-    response = await fetch(`/api${path}`, { credentials: "same-origin" });
+    response = await fetch(`${BASE_PATH}/api${path}`, { credentials: "same-origin" });
   } catch {
     throw new ApiClientError(0, "NETWORK_ERROR", "Không thể kết nối đến máy chủ");
   }

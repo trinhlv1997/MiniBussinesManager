@@ -2,7 +2,7 @@
 
 Phần mềm quản lý nội bộ cho công ty nhỏ khoảng 10 nhân viên, chạy trên Cloudflare Workers và D1. Giao diện hoàn toàn bằng tiếng Việt, nhiều tài khoản đăng nhập với phân quyền theo vai trò (Admin / Nhân viên).
 
-Các module: Tổng quan, Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Cài đặt.
+Các module: Tổng quan, Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Người dùng, Nhật ký hoạt động, Cài đặt và trang Hướng dẫn sử dụng (`src/client/pages/guide-page.tsx`, mỗi vai trò chỉ thấy mục của chức năng mình được dùng; khi đổi nghiệp vụ nhớ cập nhật trang này).
 
 ## Chạy trên máy
 
@@ -13,6 +13,8 @@ npm install
 npm run setup   # tạo .dev.vars, chạy migration, tạo tài khoản và dữ liệu demo
 npm run dev
 ```
+
+Mở http://localhost:5173/management/ (mở gốc `/` sẽ tự chuyển vào đó).
 
 Tài khoản demo chỉ dành cho phát triển: `admin` / `admin` (Admin) và `nhanvien` / `nhanvien` (Nhân viên, gắn với NV0006). Lệnh tạo tài khoản production từ chối mật khẩu demo và yêu cầu mật khẩu từ 12 ký tự.
 
@@ -99,6 +101,15 @@ npx wrangler d1 create mini-business-manager
    ```bash
    npm run db:seed:demo:remote
    ```
+
+### Tên miền và tiền tố `/management`
+
+Bản production chạy tại **https://led-leman.com/management**, dùng chung tên miền với website bán hàng LeMan (một Worker khác). `routes` trong `wrangler.jsonc` chỉ đưa `led-leman.com/management*` về Worker này, phần còn lại của tên miền vẫn là website bán hàng.
+
+- Tiền tố khai báo một chỗ trong `src/shared/base-path.ts` (`BASE_PATH`). React Router dùng nó làm `basename`, và client gọi API qua `/management/api/*`.
+- `src/worker/index.ts` bỏ tiền tố trước khi chuyển cho Hono, nên trong code và test API vẫn là `/api/*`.
+- File tĩnh nằm dưới `/management/` (`build.assetsDir` trong `vite.config.ts`, thư mục `public/management/`). Khi thêm ảnh hay file vào `public`, hãy đặt vào `public/management/` và tham chiếu bằng `` `${BASE_PATH}/...` ``.
+- Đổi tiền tố thì sửa `BASE_PATH`, `assetsDir`, thư mục `public/management`, `index.html`, `public/_headers` và `routes` / `run_worker_first` trong `wrangler.jsonc`.
 
 Chạy lại `admin:create:remote` sẽ đặt lại mật khẩu của tài khoản số 1, đưa nó về Admin đang hoạt động và đăng xuất mọi thiết bị, nên đây cũng là cách khôi phục khi quên mật khẩu hoặc lỡ khoá hết tài khoản Admin. Các tài khoản khác do Admin tạo trong màn hình **Người dùng**.
 

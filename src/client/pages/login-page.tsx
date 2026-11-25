@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Navigate, useLocation, useNavigate } from "react-router";
 import { useState } from "react";
+import { BASE_PATH } from "@shared/base-path";
 import { loginSchema, type LoginInput } from "@shared/validation/auth";
 import { FormField } from "@/components/common/form-field";
 import { PageSkeleton } from "@/components/common/states";
@@ -49,7 +50,7 @@ export default function LoginPage() {
     <main className="flex min-h-svh items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex items-center justify-center gap-2.5">
-          <img src="/favicon.svg" alt="" className="size-9" />
+          <img src={`${BASE_PATH}/favicon.svg`} alt="" className="size-9" />
           <div>
             <p className="font-semibold">Mini Business Manager</p>
             <p className="text-xs text-muted-foreground">Quản lý thiết bị điện và điện tử</p>

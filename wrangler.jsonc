@@ -4,11 +4,16 @@
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-11-01",
   "workers_dev": true,
+  // Dùng chung tên miền với website LeMan: chỉ /management/* về Worker này (src/shared/base-path.ts).
+  "routes": [
+    { "pattern": "led-leman.com/management", "zone_name": "led-leman.com" },
+    { "pattern": "led-leman.com/management/*", "zone_name": "led-leman.com" }
+  ],
   "observability": { "enabled": true },
   "assets": {
     "not_found_handling": "single-page-application",
     // Chỉ API mới gọi Worker; file tĩnh được phục vụ trực tiếp, không tính CPU của Worker.
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*", "/management/api/*"]
   },
   "vars": { "APP_ENV": "production" },
   // Dọn dẹp hằng đêm lúc 02:00 giờ Việt Nam (19:00 UTC): nhật ký cũ hơn 30 ngày, phiên hết hạn.
@@ -17,8 +22,7 @@
     {
       "binding": "DB",
       "database_name": "mini-business-manager",
-      // Thay bằng database_id thật từ `wrangler d1 create` trước khi deploy.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "ef34149e-9949-4d8d-bf77-757ccd4e369f",
       "migrations_dir": "migrations"
     }
   ]

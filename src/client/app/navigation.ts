@@ -1,4 +1,5 @@
 import {
+  BookOpen,
   Boxes,
   ChartColumn,
   History,
@@ -86,6 +87,12 @@ export const NAVIGATION: NavigationItem[] = [
     module: "settings",
     icon: Settings,
     description: "Thông tin công ty và hệ thống.",
+  },
+  {
+    path: "/huong-dan",
+    label: "Hướng dẫn sử dụng",
+    icon: BookOpen,
+    description: "Cách dùng từng chức năng của hệ thống.",
   },
   {
     path: "/tai-khoan",

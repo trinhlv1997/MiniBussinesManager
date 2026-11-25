@@ -1,6 +1,7 @@
 import { NavLink, useLocation } from "react-router";
 import { findNavigationItem, visibleNavigation } from "@/app/navigation";
 import { useSession } from "@/features/auth/use-auth";
+import { BASE_PATH } from "@shared/base-path";
 import { useSettings } from "@/features/settings/use-settings";
 import {
   Sidebar,
@@ -26,7 +27,7 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <div className="flex h-10 items-center gap-2.5 px-1 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <img src={settings?.logo || "/favicon.svg"} alt="" className="size-7 shrink-0 rounded object-cover" />
+          <img src={settings?.logo || `${BASE_PATH}/favicon.svg`} alt="" className="size-7 shrink-0 rounded object-cover" />
           <span className="truncate text-sm font-semibold group-data-[collapsible=icon]:hidden">
             {settings?.appName ?? "Mini Business Manager"}
           </span>
