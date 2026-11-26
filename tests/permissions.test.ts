@@ -119,7 +119,7 @@ describe("customer visibility for employees", () => {
   });
 });
 
-describe("VIP customers are admin-only", () => {
+describe("VIP customers: admin and manager only", () => {
   const vipError = async (response: Response) => {
     expect(response.status).toBe(403);
     expect(await response.json()).toMatchObject({ error: { code: "FORBIDDEN", fields: { tier: expect.any(String) } } });
@@ -135,6 +135,22 @@ describe("VIP customers are admin-only", () => {
     await vipError(await as(a.cookie).send(`/api/customers/${dealer.id}`, "PUT", customer("Đại lý", { tier: "vip" })));
     // Đổi giữa các hạng không phải VIP thì được.
     expect((await as(a.cookie).send(`/api/customers/${retail.id}`, "PUT", customer("Khách lẻ", { tier: "normal" }))).status).toBe(200);
+  });
+
+  it("lets a manager add VIP customers and change tiers to and from VIP", async () => {
+    const staff = await data<{ id: number }>(await as(admin).send("/api/employees", "POST", { fullName: "Trưởng phòng KD", status: "active" }));
+    const created = await as(admin).send("/api/users", "POST", { username: "ql.kd", displayName: "Trưởng phòng KD", password: PASSWORD, role: "manager", employeeId: staff.id });
+    expect(created.status).toBe(201);
+    const manager = await login("ql.kd");
+
+    const vip = await createCustomer(manager, customer("NPP Miền Trung", { tier: "vip" }));
+    expect(vip).toMatchObject({ careEmployeeId: staff.id });
+    const normal = await createCustomer(manager, customer("Đại lý Sao Mai", { tier: "normal" }));
+    const raised = await as(manager).send(`/api/customers/${normal.id}`, "PUT", customer("Đại lý Sao Mai", { tier: "vip" }));
+    expect(raised.status).toBe(200);
+    const lowered = await as(manager).send(`/api/customers/${vip.id}`, "PUT", customer("NPP Miền Trung", { tier: "basic" }));
+    expect(lowered.status).toBe(200);
+    expect((await data<{ tier: string }>(await as(admin).get(`/api/customers/${vip.id}`))).tier).toBe("basic");
   });
 
   it("lets an employee edit an assigned VIP customer but not change its tier", async () => {
@@ -195,10 +211,12 @@ describe("who did it and when", () => {
     await as(admin).send(`/api/customers/${row.id}`, "PUT", customer("Khách mới (đã sửa)"));
     expect(await data(await as(admin).get(`/api/customers/${row.id}`))).toMatchObject({ createdBy: a.userId, updatedBy: 1 });
 
+    // Nhân viên không tạo được sản phẩm nữa; người tạo sản phẩm kiểm tra bằng tài khoản Quản lý.
+    const managerUser = await data<{ id: number }>(await as(admin).send("/api/users", "POST", { username: "ql.a", displayName: "Quản lý A", password: PASSWORD, role: "manager" }));
     const product = await data<{ id: number; createdBy: number }>(
-      await as(a.cookie).send("/api/products", "POST", { name: "Ổ cắm", categoryId: (await data<{ id: number }>(await as(admin).send("/api/product-categories", "POST", { name: "Điện" }))).id, unit: "Cái", costPrice: 1, salePrice: 2, minStock: 0, status: "active" }),
+      await as(await login("ql.a")).send("/api/products", "POST", { name: "Ổ cắm", categoryId: (await data<{ id: number }>(await as(admin).send("/api/product-categories", "POST", { name: "Điện" }))).id, unit: "Cái", costPrice: 1, salePrice: 2, minStock: 0, status: "active" }),
     );
-    expect(product.createdBy).toBe(a.userId);
+    expect(product.createdBy).toBe(managerUser.id);
   });
 
   it("lists every action with user, time and object code for admins", async () => {
@@ -267,5 +285,109 @@ describe("user management", () => {
     await login("nv.a", "mat-khau-moi-cua-a");
     const audit = await data<Page<{ action: string }>>(await as(admin).get(`/api/audit-logs?entityType=admin_user&entityId=${a.userId}`));
     expect(audit.items.map((i) => i.action)).toContain("user.password_reset");
+  });
+});
+
+describe("password length rule", () => {
+  it("accepts 8 characters and rejects 7, when creating accounts and changing passwords", async () => {
+    const short = await as(admin).send("/api/users", "POST", { username: "nv.ngan", displayName: "X", password: "1234567", role: "employee" });
+    expect(short.status).toBe(422);
+    expect(((await short.json()) as { error: { fields: Record<string, string> } }).error.fields.password).toContain("8 ký tự");
+    expect((await as(admin).send("/api/users", "POST", { username: "nv.du", displayName: "X", password: "12345678", role: "employee" })).status).toBe(201);
+
+    const cookie = await login("nv.du", "12345678");
+    const change = (newPassword: string) =>
+      as(cookie).send("/api/auth/change-password", "POST", { currentPassword: "12345678", newPassword, confirmPassword: newPassword });
+    expect((await change("abcdefg")).status).toBe(422);
+    expect((await change("abcdefgh")).status).toBe(200);
+  });
+});
+
+describe("catalog: employees view only and never see cost prices", () => {
+  const product = (categoryId: number, extra: object = {}) => ({ name: "Bóng LED 9W", sku: "LED-9W", categoryId, unit: "Cái", costPrice: 41000, salePrice: 65000, minStock: 0, status: "active", ...extra });
+
+  it("blocks employees from creating, editing or deleting products and categories", async () => {
+    const { cookie } = await employeeAccount("nv.kho", "Nhân viên kho");
+    const category = await data<{ id: number }>(await as(admin).send("/api/product-categories", "POST", { name: "Chiếu sáng" }));
+    const item = await data<{ id: number }>(await as(admin).send("/api/products", "POST", product(category.id)));
+
+    for (const [path, method, body] of [
+      ["/api/products", "POST", product(category.id, { sku: "LED-10W" })],
+      [`/api/products/${item.id}`, "PUT", product(category.id, { salePrice: 1 })],
+      [`/api/products/${item.id}`, "DELETE", undefined],
+      ["/api/product-categories", "POST", { name: "Mới" }],
+      [`/api/product-categories/${category.id}`, "PUT", { name: "Đổi tên" }],
+      [`/api/product-categories/${category.id}`, "DELETE", undefined],
+    ] as const) {
+      const response = await as(cookie).send(path, method, body);
+      expect(response.status, `${method} ${path}`).toBe(403);
+    }
+    expect((await as(cookie).get("/api/products")).status).toBe(200);
+    expect((await as(cookie).get("/api/product-categories")).status).toBe(200);
+    expect((await data<{ salePrice: number }>(await as(admin).get(`/api/products/${item.id}`))).salePrice).toBe(65000);
+  });
+
+  it("hides cost price from employees in products, stock, import documents and Excel", async () => {
+    const { cookie } = await employeeAccount("nv.kho", "Nhân viên kho");
+    const category = await data<{ id: number }>(await as(admin).send("/api/product-categories", "POST", { name: "Chiếu sáng" }));
+    const item = await data<{ id: number }>(await as(admin).send("/api/products", "POST", product(category.id)));
+
+    expect((await data<Page<{ costPrice: number | null }>>(await as(cookie).get("/api/products"))).items[0]!.costPrice).toBeNull();
+    expect((await data<{ costPrice: number | null }>(await as(cookie).get(`/api/products/${item.id}`))).costPrice).toBeNull();
+    expect((await data<Page<{ costPrice: number | null }>>(await as(cookie).get("/api/inventory/balances"))).items[0]!.costPrice).toBeNull();
+    expect((await data<Page<{ costPrice: number | null }>>(await as(admin).get("/api/inventory/balances"))).items[0]!.costPrice).toBe(41000);
+    const sheet = await readXlsx(await as(cookie).get("/api/products/export"));
+    expect(sheet.headers).not.toContain("Giá nhập (VND)");
+    expect(sheet.headers).toContain("Giá khách lẻ (VND)");
+    expect((await readXlsx(await as(admin).get("/api/products/export"))).headers).toContain("Giá nhập (VND)");
+
+    // Phiếu nhập do Quản trị lập: Nhân viên xem được nhưng không thấy tiền.
+    const imported = await as(admin).send("/api/inventory/import", "POST", {
+      transactionDate: vnToday(),
+      lines: [{ productId: item.id, quantity: 10, unitPrice: 41000 }],
+      confirm: true,
+    });
+    expect(imported.status).toBe(201);
+    const { id } = await data<{ id: number }>(imported);
+    const mine = await data<{ totalAmount: number | null; lines: { unitPrice: number | null; amount: number | null }[] }>(await as(cookie).get(`/api/inventory/transactions/${id}`));
+    expect(mine).toMatchObject({ totalAmount: null, lines: [{ unitPrice: null, amount: null }] });
+    expect((await data<Page<{ totalAmount: number | null }>>(await as(cookie).get("/api/inventory/transactions"))).items[0]!.totalAmount).toBeNull();
+
+    // Sắp xếp theo giá nhập bị bỏ qua (không lộ thứ tự giá), không báo lỗi.
+    expect((await as(cookie).get("/api/products?sort=costPrice&dir=asc")).status).toBe(200);
+  });
+
+  it("does not let employees create, edit, confirm, cancel or reverse import documents", async () => {
+    const { cookie } = await employeeAccount("nv.kho", "Nhân viên kho");
+    const category = await data<{ id: number }>(await as(admin).send("/api/product-categories", "POST", { name: "Chiếu sáng" }));
+    const item = await data<{ id: number }>(await as(admin).send("/api/products", "POST", product(category.id)));
+    const line = { productId: item.id, quantity: 5, unitPrice: 41000 };
+    const body = (confirm: boolean) => ({ transactionDate: vnToday(), lines: [line], confirm });
+
+    const denied = await as(cookie).send("/api/inventory/import", "POST", body(true));
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({ error: { code: "FORBIDDEN" } });
+
+    const draft = await data<{ id: number }>(await as(admin).send("/api/inventory/import", "POST", body(false)));
+    expect((await as(cookie).send(`/api/inventory/import/${draft.id}`, "PUT", body(false))).status).toBe(403);
+    expect((await as(cookie).send(`/api/inventory/transactions/${draft.id}/confirm`, "POST")).status).toBe(403);
+    expect((await as(cookie).send(`/api/inventory/transactions/${draft.id}/cancel`, "POST")).status).toBe(403);
+    const confirmed = await data<{ id: number }>(await as(admin).send("/api/inventory/import", "POST", body(true)));
+    expect((await as(cookie).send(`/api/inventory/transactions/${confirmed.id}/reverse`, "POST", { reason: "Nhập nhầm" })).status).toBe(403);
+
+    // Xuất kho và điều chỉnh vẫn dùng được.
+    const adjust = await as(cookie).send("/api/inventory/adjust", "POST", { transactionDate: vnToday(), reason: "Kiểm kê", lines: [{ productId: item.id, delta: -1 }], confirm: true });
+    expect(adjust.status).toBe(201);
+    const exported = await as(cookie).send("/api/inventory/export", "POST", { transactionDate: vnToday(), lines: [{ productId: item.id, quantity: 1 }], confirm: false });
+    expect(exported.status).toBe(201);
+  });
+
+  it("lets managers manage the catalog and see cost prices", async () => {
+    await as(admin).send("/api/users", "POST", { username: "ql.sp", displayName: "Quản lý SP", password: PASSWORD, role: "manager" });
+    const manager = await login("ql.sp");
+    const category = await data<{ id: number }>(await as(manager).send("/api/product-categories", "POST", { name: "Thiết bị" }));
+    const created = await as(manager).send("/api/products", "POST", product(category.id));
+    expect(created.status).toBe(201);
+    expect((await data<{ costPrice: number }>(created)).costPrice).toBe(41000);
   });
 });

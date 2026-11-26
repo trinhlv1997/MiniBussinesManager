@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Controller, useForm, type Control, type FieldValues, type Path } from "react-hook-form";
 import { toast } from "sonner";
 import { ROLE_LABELS } from "@shared/permissions";
+import { PASSWORD_MIN_LENGTH } from "@shared/validation/auth";
 import type { UserAccount } from "@shared/types";
 import {
   resetPasswordSchema,
@@ -115,7 +116,7 @@ function CreateUserForm({ onClose }: { onClose: () => void }) {
           label="Mật khẩu ban đầu"
           type="password"
           autoComplete="new-password"
-          hint="Tối thiểu 12 ký tự. Người dùng nên đổi sau khi đăng nhập."
+          hint={`Tối thiểu ${PASSWORD_MIN_LENGTH} ký tự. Người dùng nên đổi sau khi đăng nhập.`}
           error={errors.password}
           {...form.register("password")}
         />
@@ -191,7 +192,7 @@ export function ResetPasswordDialog({ user, onClose }: { user: UserAccount; onCl
         label="Mật khẩu mới"
         type="password"
         autoComplete="new-password"
-        hint="Tối thiểu 12 ký tự"
+        hint={`Tối thiểu ${PASSWORD_MIN_LENGTH} ký tự`}
         error={form.formState.errors.password}
         {...form.register("password")}
       />

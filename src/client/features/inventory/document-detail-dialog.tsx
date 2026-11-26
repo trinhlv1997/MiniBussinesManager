@@ -1,4 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { canImportStock } from "@shared/permissions";
+import { useSession } from "@/features/auth/use-auth";
 import { FileDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import { Link } from "react-router";
@@ -67,6 +69,7 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
   const client = useQueryClient();
   const { data, error } = useResourceDetail<InventoryTransactionDetail>("inventory", BASE, id);
   const nameOf = useUserNames();
+  const { data: me } = useSession();
   const byWhom = (userId: number | null, at: string | null) =>
     at ? [nameOf(userId), formatDateTime(at)].filter(Boolean).join(" · ") : null;
   const [panel, setPanel] = useState<"edit" | "cancel" | "reverse" | null>(null);
@@ -92,8 +95,10 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
     return <DocumentFormDialog kind={data.type as DocumentKind} document={data} onClose={() => setPanel(null)} />;
   }
 
-  const isDraft = data?.status === "draft";
-  const canReverse = data?.status === "confirmed" && data.type !== "reversal" && !data.reversedBy;
+  // Phiếu nhập: Nhân viên chỉ xem, không xác nhận / sửa / hủy / đảo ngược (server cũng chặn).
+  const locked = data?.type === "import" && !(me && canImportStock(me.role));
+  const isDraft = data?.status === "draft" && !locked;
+  const canReverse = data?.status === "confirmed" && data.type !== "reversal" && !data.reversedBy && !locked;
   const canInvoice = data ? canExportInvoice(data) : false;
 
   return (
@@ -176,7 +181,10 @@ export function DocumentDetailDialog({ id, onClose }: { id: number; onClose: () 
                 </TableBody>
               </Table>
             </div>
-            {data.totalAmount > 0 && (
+            {data.totalAmount === null && (
+              <p className="text-right text-xs text-muted-foreground">Đơn giá phiếu nhập là giá nhập, chỉ Quản lý và Quản trị viên xem được.</p>
+            )}
+            {data.totalAmount !== null && data.totalAmount > 0 && (
               <p className="text-right text-sm">
                 Tổng thành tiền: <span className="font-semibold tabular-nums">{formatVnd(data.totalAmount)}</span>
               </p>

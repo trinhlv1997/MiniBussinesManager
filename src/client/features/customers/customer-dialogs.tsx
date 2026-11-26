@@ -76,7 +76,7 @@ function CareEmployeeField({ control, current }: { control: Control<CustomerForm
 export function CustomerFormDialog({ customer, onClose }: { customer?: Customer; onClose: () => void }) {
   const can = useCan();
   const role = useSession().data?.role ?? "employee";
-  // Nhân viên không chọn được VIP; khách đang là VIP thì hạng bị khoá (server cũng chặn).
+  // Nhân viên không chọn được VIP (Quản lý, Quản trị thì được); khách đang là VIP thì hạng bị khoá (server cũng chặn).
   const lockedTier = Boolean(customer && !canAssignTier(role, customer.tier));
   const tierOptions = optionsFrom(CUSTOMER_TIER_LABELS).filter((option) => canAssignTier(role, option.value));
   const form = useForm<CustomerFormValues, unknown, CustomerInput>({
@@ -121,14 +121,14 @@ export function CustomerFormDialog({ customer, onClose }: { customer?: Customer;
           <div className="space-y-1.5 text-sm">
             <p className="font-medium">Hạng khách hàng</p>
             <CustomerTierBadge tier={customer!.tier} />
-            <p className="text-xs text-muted-foreground">Chỉ quản trị viên được đổi hạng của khách hàng VIP.</p>
+            <p className="text-xs text-muted-foreground">Chỉ Quản lý hoặc Quản trị viên được đổi hạng của khách hàng VIP.</p>
           </div>
         ) : (
           <SelectField
             control={form.control}
             name="tier"
             label="Hạng khách hàng"
-            hint={role === "admin" ? undefined : "Khách hàng VIP chỉ quản trị viên được thêm"}
+            hint={canAssignTier(role, "vip") ? undefined : "Khách hàng VIP chỉ Quản lý hoặc Quản trị viên được thêm"}
             options={tierOptions}
           />
         )}

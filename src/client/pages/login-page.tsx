@@ -9,6 +9,7 @@ import { PageSkeleton } from "@/components/common/states";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DevQuickLogin } from "@/features/auth/dev-quick-login";
 import { useLogin, useSession } from "@/features/auth/use-auth";
 import { applyServerErrors } from "@/lib/form-errors";
 
@@ -86,6 +87,17 @@ export default function LoginPage() {
                 {login.isPending ? "Đang đăng nhập…" : "Đăng nhập"}
               </Button>
             </form>
+            {import.meta.env.DEV && (
+              <DevQuickLogin
+                disabled={login.isPending}
+                onPick={(username, password) => {
+                  // Điền sẵn form rồi đăng nhập luôn, đi qua đúng luồng đăng nhập thật.
+                  form.setValue("username", username);
+                  form.setValue("password", password);
+                  void onSubmit();
+                }}
+              />
+            )}
           </CardContent>
         </Card>
       </div>

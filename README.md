@@ -1,8 +1,8 @@
 # Mini Business Manager
 
-Phần mềm quản lý nội bộ cho công ty nhỏ khoảng 10 nhân viên, chạy trên Cloudflare Workers và D1. Giao diện hoàn toàn bằng tiếng Việt, nhiều tài khoản đăng nhập với phân quyền theo vai trò (Admin / Nhân viên).
+Phần mềm quản lý nội bộ cho công ty nhỏ khoảng 10 nhân viên, chạy trên Cloudflare Workers và D1. Giao diện hoàn toàn bằng tiếng Việt, nhiều tài khoản đăng nhập với phân quyền theo vai trò (Admin / Quản lý / Nhân viên).
 
-Các module: Tổng quan, Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Người dùng, Nhật ký hoạt động, Cài đặt và trang Hướng dẫn sử dụng (`src/client/pages/guide-page.tsx`, mỗi vai trò chỉ thấy mục của chức năng mình được dùng; khi đổi nghiệp vụ nhớ cập nhật trang này).
+Các module: Tổng quan, Công việc (Kanban, nhóm), Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Người dùng, Nhật ký hoạt động, Cài đặt và trang Hướng dẫn sử dụng (`src/client/pages/guide-page.tsx`, mỗi vai trò chỉ thấy mục của chức năng mình được dùng; khi đổi nghiệp vụ nhớ cập nhật trang này).
 
 ## Chạy trên máy
 
@@ -16,7 +16,7 @@ npm run dev
 
 Mở http://localhost:5173/management/ (mở gốc `/` sẽ tự chuyển vào đó).
 
-Tài khoản demo chỉ dành cho phát triển: `admin` / `admin` (Admin) và `nhanvien` / `nhanvien` (Nhân viên, gắn với NV0006). Lệnh tạo tài khoản production từ chối mật khẩu demo và yêu cầu mật khẩu từ 12 ký tự.
+Tài khoản demo chỉ dành cho phát triển: `admin` / `admin` (Admin) và `nhanvien` / `nhanvien` (Nhân viên, gắn với NV0006). Lệnh tạo tài khoản production từ chối mật khẩu demo và yêu cầu mật khẩu từ 8 ký tự (`PASSWORD_MIN_LENGTH` trong `src/shared/validation/auth.ts`).
 
 Dữ liệu demo mô phỏng một công ty thiết bị điện và điện tử, gồm 1 công ty, 10 nhân viên, 20 khách hàng, 5 danh mục, 30 sản phẩm và 20 phiếu kho. Tên thương hiệu và giá chỉ là dữ liệu mẫu. Chạy lại `npm run db:seed:local` là an toàn: dữ liệu đã có được giữ nguyên.
 
@@ -121,8 +121,9 @@ Quyền được định nghĩa ở một chỗ duy nhất, `src/shared/permissi
 
 | Vai trò | Được dùng |
 | --- | --- |
-| **Admin** | Toàn bộ hệ thống, gồm Người dùng, Nhật ký hoạt động, Cài đặt |
-| **Nhân viên** | Khách hàng, Sản phẩm, Quản lý kho. Chỉ thấy khách hàng được phân công cho hồ sơ nhân viên của mình (ô Nhân viên chăm sóc) hoặc do chính mình tạo; khách ngoài phạm vi trả về "không tìm thấy". Khách mới tự giao cho chính mình; chỉ Admin phân công lại. Không được thêm khách VIP (Nhà phân phối), nâng khách lên VIP hay đổi hạng của khách VIP. Phiếu xuất chỉ cho khách trong phạm vi, không xuất cho nhân viên khác. |
+| **Admin** | Toàn bộ hệ thống, gồm Người dùng, Nhóm, Nhật ký hoạt động, Cài đặt |
+| **Quản lý** | Công việc của nhóm mình (tạo, giao, sửa, đổi mọi trạng thái kể cả Hủy), thêm / bớt thành viên nhóm mình, Khách hàng (kể cả thêm / sửa khách VIP), Sản phẩm, Quản lý kho, Báo cáo. Không xoá công việc, không đổi trưởng nhóm. Phạm vi khách hàng như Nhân viên. |
+| **Nhân viên** | Công việc được giao cho mình (Mới → Đang làm → Hoàn thành / Chờ duyệt, chỉ gửi yêu cầu hủy). Sản phẩm, Danh mục chỉ xem; không thấy giá nhập (server bỏ giá nhập khỏi sản phẩm, tồn kho, phiếu nhập, Excel — `src/worker/lib/cost-visibility.ts`); không nhập kho, chỉ Xuất kho và Điều chỉnh. Khách hàng, Quản lý kho. Chỉ thấy khách hàng được phân công cho hồ sơ nhân viên của mình (ô Nhân viên chăm sóc) hoặc do chính mình tạo; khách ngoài phạm vi trả về "không tìm thấy". Khách mới tự giao cho chính mình; chỉ Admin phân công lại. Không được thêm khách VIP (Nhà phân phối), nâng khách lên VIP hay đổi hạng của khách VIP. Phiếu xuất chỉ cho khách trong phạm vi, không xuất cho nhân viên khác. |
 
 - **Người dùng** (Admin): tạo tài khoản, chọn vai trò, gắn với hồ sơ nhân viên (mỗi nhân viên tối đa một tài khoản), khoá / mở khoá, đặt lại mật khẩu. Tài khoản không bị xoá để nhật ký giữ tên người làm. Hệ thống luôn giữ ít nhất một Admin đang hoạt động; không ai tự khoá hay tự hạ quyền mình.
 - **Ai làm, lúc nào:** nhân viên, khách hàng, sản phẩm, danh mục lưu `created_by` / `updated_by`; phiếu kho thêm `confirmed_by`. Cửa sổ chi tiết hiện "Tạo bởi … · thời gian" và "Sửa lần cuối …"; danh sách phiếu kho có cột Người lập. Dữ liệu cũ được điền lại từ nhật ký khi chạy migration 0010.
@@ -131,6 +132,14 @@ Quyền được định nghĩa ở một chỗ duy nhất, `src/shared/permissi
 - Mọi tài khoản tự đổi mật khẩu ở **Tài khoản của tôi** (menu ở góc phải).
 
 Thêm vai trò mới: khai báo trong `ROLES`, `ROLE_LABELS`, `ROLE_MODULES` của `src/shared/permissions.ts` và cập nhật CHECK `admin_users_role_check` bằng một migration.
+
+## Công việc và nhóm
+
+- Quy tắc nằm ở `src/shared/tasks.ts` (dùng chung server và giao diện): trạng thái Mới / Đang làm / Chờ duyệt / Hoàn thành / Đã hủy, bước chuyển hợp lệ theo vai trò (`allowedTransitions`), quá hạn (`isOverdue`).
+- Server (`src/worker/services/tasks.ts`) giới hạn phạm vi: Admin thấy mọi việc, Quản lý thấy việc của thành viên nhóm mình (và việc mình nhận / mình giao), Nhân viên chỉ thấy việc của mình. Đổi trạng thái kèm trạng thái cũ để phát hiện xung đột (409) và một lý do không bắt buộc, lưu vào `task_history`.
+- Nhóm (`src/worker/services/teams.ts`): mỗi người thuộc tối đa một nhóm. Admin chọn trưởng nhóm (tài khoản Nhân viên được nâng lên Quản lý) và có thể tạo tài khoản cho nhân viên chưa có tài khoản ngay khi thêm vào nhóm (tối đa 3 tài khoản mỗi lần lưu vì băm mật khẩu tốn CPU). Quản lý chỉ thêm / bớt thành viên đã có tài khoản.
+- Vai trò lưu ở cột `admin_users.user_role` (migration `0012_tasks`). Cột `role` cũ có CHECK chỉ nhận admin / employee và không dựng lại bảng được (phiếu kho đã khoá chặn ON DELETE SET NULL), nên được giữ làm cột legacy và ghi song song.
+- Khi chạy `npm run dev`, trang đăng nhập có nút **Đăng nhập nhanh** bằng tài khoản demo (`src/client/features/auth/dev-quick-login.tsx`); bản build production không chứa khối này. `npm run db:seed:local` luôn trả các tài khoản demo về mật khẩu mặc định (= tên đăng nhập): `admin`, `quanly`, `nhanvien`, `nhanvien2`, `nhanvien3`.
 
 ## Khách hàng: hạng và nhân viên chăm sóc
 

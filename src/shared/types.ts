@@ -1,3 +1,4 @@
+import type { TaskHistoryField, TaskPriority, TaskStatus } from "./tasks";
 import type { Role } from "./permissions";
 import type {
   CustomerTier,
@@ -68,7 +69,8 @@ export type Product = {
   categoryId: number;
   categoryName: string;
   unit: string;
-  costPrice: number;
+  /** null khi tài khoản không được xem giá nhập (Nhân viên). */
+  costPrice: number | null;
   /** Giá khách lẻ. Giá đại lý / phân phối null = bằng giá lẻ (xem shared/pricing.ts). */
   salePrice: number;
   dealerPrice: number | null;
@@ -109,7 +111,8 @@ export type InventoryTransaction = {
   createdAt: string;
   lineCount: number;
   totalQuantity: number;
-  totalAmount: number;
+  /** null khi phiếu có giá nhập mà tài khoản không được xem (Nhân viên). */
+  totalAmount: number | null;
 };
 
 export type InventoryLine = {
@@ -283,4 +286,82 @@ export type AuditEntry = {
   entityId: string | null;
   /** Mã đối tượng (KH0001, PX-000012…) nếu nhật ký có lưu. */
   entityCode: string | null;
+};
+
+/** Thẻ công việc trên Kanban / danh sách. Tên, ảnh người nhận lấy từ danh sách TaskPerson. */
+export type Task = {
+  id: number;
+  title: string;
+  description: string | null;
+  assigneeId: number;
+  assignerId: number | null;
+  priority: TaskPriority;
+  status: TaskStatus;
+  startDate: string | null;
+  dueDate: string;
+  requiresReview: boolean;
+  /** Nhân viên đã gửi yêu cầu hủy, đang chờ Quản lý / Admin xử lý. */
+  cancelRequestedAt: string | null;
+  cancelRequestReason: string | null;
+  cancelRequestedBy: number | null;
+  completedAt: string | null;
+  createdBy: number | null;
+  updatedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TaskHistoryEntry = {
+  id: number;
+  actorId: number | null;
+  field: TaskHistoryField;
+  oldValue: string | null;
+  newValue: string | null;
+  /** Lý do người dùng ghi khi đổi trạng thái (không bắt buộc). */
+  note: string | null;
+  createdAt: string;
+};
+
+export type TaskDetail = Task & { history: TaskHistoryEntry[] };
+
+/** Người xuất hiện trên task (người nhận / người giao) mà tài khoản hiện tại được thấy. */
+export type TaskPerson = {
+  id: number;
+  displayName: string;
+  role: Role;
+  active: boolean;
+  /** Ảnh đại diện của hồ sơ nhân viên gắn với tài khoản (data URL), nếu có. */
+  avatar: string | null;
+  /** Tài khoản hiện tại có được giao việc cho người này không. */
+  assignable: boolean;
+};
+
+export type Team = {
+  id: number;
+  name: string;
+  description: string | null;
+  managerId: number | null;
+  memberIds: number[];
+  createdBy: number | null;
+  updatedBy: number | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * Người có thể đưa vào nhóm: mọi tài khoản và mọi hồ sơ nhân viên chưa có tài khoản
+ * (userId = null; Quản trị tạo tài khoản cho họ ngay khi thêm vào nhóm).
+ */
+export type TeamCandidate = {
+  key: string;
+  userId: number | null;
+  username: string | null;
+  role: Role | null;
+  active: boolean;
+  employeeId: number | null;
+  employeeCode: string | null;
+  name: string;
+  position: string | null;
+  /** Nhóm hiện tại của tài khoản (null = chưa thuộc nhóm nào). */
+  teamId: number | null;
 };

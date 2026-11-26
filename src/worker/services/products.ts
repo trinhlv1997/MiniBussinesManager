@@ -251,6 +251,8 @@ export async function deleteCategory(db: Db, actor: Actor, id: number) {
   ]);
 }
 
+export const PRODUCT_COST_HEADER = "Giá nhập (VND)";
+
 export const PRODUCT_EXPORT: ExportColumn<Product>[] = [
   { header: "Mã SKU", value: (row) => row.sku },
   { header: "Tên sản phẩm", value: (row) => row.name },
@@ -259,7 +261,7 @@ export const PRODUCT_EXPORT: ExportColumn<Product>[] = [
   { header: "Thông số kỹ thuật", value: (row) => row.specifications },
   { header: "Bảo hành", value: (row) => warrantyLabel(row.warrantyMonths) },
   { header: "Đơn vị tính", value: (row) => row.unit },
-  { header: "Giá nhập (VND)", value: (row) => row.costPrice },
+  { header: PRODUCT_COST_HEADER, value: (row) => row.costPrice },
   // Giá thực áp dụng (để trống = bằng giá lẻ), để bảng tính luôn có số.
   { header: "Giá phân phối (VND)", value: (row) => priceForTier(row, "vip") },
   { header: "Giá đại lý (VND)", value: (row) => priceForTier(row, "normal") },

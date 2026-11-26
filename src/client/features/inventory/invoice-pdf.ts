@@ -77,7 +77,8 @@ export function buildInvoiceDefinition({ document, company, customer, logo }: In
     unitPrice: line.unitPrice,
     amount: line.amount,
   }));
-  const total = document.totalAmount;
+  // Chỉ in phiếu xuất cho khách (luôn có thành tiền); `?? 0` cho kiểu dữ liệu chung có thể null.
+  const total = document.totalAmount ?? 0;
   const missingPrice = lines.some((line) => line.unitPrice === null);
   const customerName = customer?.name ?? document.recipientName ?? "";
   // Khách doanh nghiệp: "Người mua" là người liên hệ; khách cá nhân thì để trống như mẫu.

@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Boxes,
+  ClipboardList,
   ChartColumn,
   History,
   LayoutDashboard,
@@ -9,6 +10,7 @@ import {
   UserCog,
   UserRound,
   Users,
+  UsersRound,
   type LucideIcon,
 } from "lucide-react";
 import { canAccess, type Module, type Role } from "@shared/permissions";
@@ -31,6 +33,13 @@ export const NAVIGATION: NavigationItem[] = [
     module: "dashboard",
     icon: LayoutDashboard,
     description: "Tình hình thiết bị điện, đồ điện tử, tồn kho và khách hàng của công ty.",
+  },
+  {
+    path: "/cong-viec",
+    label: "Công việc",
+    module: "tasks",
+    icon: ClipboardList,
+    description: "Giao việc, theo dõi tiến độ trên bảng Kanban.",
   },
   {
     path: "/nhan-vien",
@@ -75,6 +84,13 @@ export const NAVIGATION: NavigationItem[] = [
     description: "Tài khoản đăng nhập, vai trò và nhân viên gắn với từng tài khoản.",
   },
   {
+    path: "/nhom",
+    label: "Nhóm",
+    module: "teams",
+    icon: UsersRound,
+    description: "Nhóm làm việc, trưởng nhóm và thành viên.",
+  },
+  {
     path: "/nhat-ky",
     label: "Nhật ký hoạt động",
     module: "audit",
@@ -106,7 +122,7 @@ export const NAVIGATION: NavigationItem[] = [
 export const visibleNavigation = (role: Role | undefined) =>
   NAVIGATION.filter((item) => !item.hidden && (!item.module || canAccess(role, item.module)));
 
-/** Trang đầu tiên vai trò được vào (Employee không có Tổng quan nên vào Khách hàng). */
+/** Trang đầu tiên vai trò được vào (Quản lý / Nhân viên không có Tổng quan nên vào Công việc). */
 export const homePathFor = (role: Role | undefined) => visibleNavigation(role)[0]?.path ?? "/tai-khoan";
 
 export function findNavigationItem(pathname: string): NavigationItem | undefined {

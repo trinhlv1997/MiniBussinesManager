@@ -19,6 +19,10 @@ const DELETE_UNREFERENCED_TRANSACTIONS = `
   )`;
 
 const DELETE_STATEMENTS = [
+  "DELETE FROM task_history",
+  "DELETE FROM tasks",
+  "DELETE FROM team_members",
+  "DELETE FROM teams",
   "DELETE FROM inventory_transaction_items",
   DELETE_UNREFERENCED_TRANSACTIONS,
   DELETE_UNREFERENCED_TRANSACTIONS,

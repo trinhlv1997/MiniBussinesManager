@@ -4,12 +4,13 @@ import type { ApiFailure } from "@shared/api";
 import type { AppEnv } from "./env";
 import { ApiError } from "./lib/errors";
 import { ok } from "./lib/http";
-import type { Module } from "@shared/permissions";
+import { canManageCatalog, type Module } from "@shared/permissions";
 import { apiHeaders, requireAdmin, requireModule, requireSameOrigin } from "./middleware/security";
 import { auditRoutes, userNameRoutes, userRoutes } from "./routes/admin";
 import { dashboardRoutes, reportRoutes } from "./routes/analytics";
 import { authRoutes } from "./routes/auth";
 import { inventoryRoutes } from "./routes/inventory";
+import { taskRoutes, teamRoutes } from "./routes/tasks";
 import {
   categoryRoutes,
   customerRoutes,
@@ -43,13 +44,27 @@ const settingsGuard = new Hono<AppEnv>()
   .use("*", async (c, next) => (c.req.method === "GET" ? next() : requireModule("settings")(c, next)))
   .route("/", settingsRoutes);
 
+/** Sản phẩm, Danh mục: ai có module "products" cũng xem được; chỉ Quản trị / Quản lý được thêm, sửa, xoá. */
+const catalogGuard = (routes: Hono<AppEnv>) =>
+  new Hono<AppEnv>()
+    .use("*", requireModule("products"))
+    .use("*", async (c, next) => {
+      if (c.req.method !== "GET" && !canManageCatalog(c.get("admin").role)) {
+        throw new ApiError(403, "FORBIDDEN", "Nhân viên chỉ được xem sản phẩm và danh mục");
+      }
+      await next();
+    })
+    .route("/", routes);
+
 app.get("/health", (c) => ok(c, { status: "ok" }));
 app.route("/auth", authRoutes);
 app.route("/user-names", userNameRoutes);
+app.route("/tasks", guarded("tasks", taskRoutes));
+app.route("/teams", guarded("teams", teamRoutes));
 app.route("/employees", guarded("employees", employeeRoutes));
 app.route("/customers", guarded("customers", customerRoutes));
-app.route("/products", guarded("products", productRoutes));
-app.route("/product-categories", guarded("products", categoryRoutes));
+app.route("/products", catalogGuard(productRoutes));
+app.route("/product-categories", catalogGuard(categoryRoutes));
 app.route("/inventory", guarded("inventory", inventoryRoutes));
 app.route("/dashboard", guarded("dashboard", dashboardRoutes));
 app.route("/reports", guarded("reports", reportRoutes));

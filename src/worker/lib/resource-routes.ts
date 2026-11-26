@@ -29,7 +29,8 @@ export type ResourceConfig<Row, Query extends PagedQuery, Input> = {
   exportName: string;
   /** Tên sheet trong file Excel, ví dụ "Nhân viên". */
   sheetName: string;
-  columns: ExportColumn<Row>[];
+  /** Cột Excel; truyền hàm nếu cột phụ thuộc quyền người xem (vd: ẩn giá nhập với Nhân viên). */
+  columns: ExportColumn<Row>[] | ((actor: Actor) => ExportColumn<Row>[]);
   // `actor` = người đang thao tác: ghi người tạo / người sửa và giới hạn phạm vi dữ liệu theo vai trò.
   list: (db: Db, query: Query, actor: Actor) => Promise<Paginated<Row>>;
   get: (db: Db, id: number, actor: Actor) => Promise<unknown>;
@@ -52,7 +53,7 @@ export function resourceRoutes<Row, Query extends PagedQuery, Input>(
       return excelResponse(c, {
         fileName: config.exportName,
         sheetName: config.sheetName,
-        columns: config.columns,
+        columns: typeof config.columns === "function" ? config.columns(c.get("admin")) : config.columns,
         rows: items,
         total: pagination.total,
       });

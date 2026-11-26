@@ -85,6 +85,20 @@
       "when": 1795511169591,
       "tag": "0011_user_last_login",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1795679101161,
+      "tag": "0012_tasks",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795680540897,
+      "tag": "0013_task_status_note",
+      "breakpoints": true
     }
   ]
 }

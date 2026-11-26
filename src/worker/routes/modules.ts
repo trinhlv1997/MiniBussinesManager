@@ -33,6 +33,7 @@ import {
   updateEmployee,
 } from "../services/employees";
 import {
+  PRODUCT_COST_HEADER,
   PRODUCT_EXPORT,
   createCategory,
   createProduct,
@@ -45,6 +46,8 @@ import {
   updateProduct,
 } from "../services/products";
 import { getSettings, saveSettings } from "../services/settings";
+import { canSeeCostPrice } from "@shared/permissions";
+import { maskProduct, withoutCostSort } from "../lib/cost-visibility";
 
 export const employeeRoutes = resourceRoutes({
   querySchema: employeeListQuery,
@@ -81,14 +84,18 @@ export const customerRoutes = resourceRoutes({
     return ok(c, null);
   });
 
+/** Sản phẩm: Nhân viên chỉ xem và không thấy giá nhập (ghi bị chặn bởi catalogGuard ở app.ts). */
 export const productRoutes = resourceRoutes({
   querySchema: productListQuery,
   bodySchema: productSchema,
   exportName: "san-pham",
   sheetName: "Sản phẩm",
-  columns: PRODUCT_EXPORT,
-  list: listProducts,
-  get: getProduct,
+  columns: (actor) => (canSeeCostPrice(actor.role) ? PRODUCT_EXPORT : PRODUCT_EXPORT.filter((column) => column.header !== PRODUCT_COST_HEADER)),
+  list: async (db, query, actor) => {
+    const page = await listProducts(db, withoutCostSort(actor, query));
+    return { ...page, items: page.items.map((product) => maskProduct(actor, product)) };
+  },
+  get: async (db, id, actor) => maskProduct(actor, await getProduct(db, id)),
   create: createProduct,
   update: updateProduct,
   remove: deleteProduct,

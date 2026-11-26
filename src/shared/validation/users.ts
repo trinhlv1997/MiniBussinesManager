@@ -3,11 +3,11 @@ import { ROLES } from "../permissions";
 import { newPasswordSchema, usernameSchema } from "./auth";
 import { optionalId, requiredText } from "./common";
 
-const username = usernameSchema.regex(/^[a-z0-9._-]+$/, "Chỉ dùng chữ thường không dấu, số, dấu chấm, gạch ngang");
+export const accountUsername = usernameSchema.regex(/^[a-z0-9._-]+$/, "Chỉ dùng chữ thường không dấu, số, dấu chấm, gạch ngang");
 const role = z.enum(ROLES, "Vai trò không hợp lệ");
 
 export const userCreateSchema = z.object({
-  username,
+  username: accountUsername,
   displayName: requiredText("tên hiển thị", 120),
   password: newPasswordSchema,
   role,

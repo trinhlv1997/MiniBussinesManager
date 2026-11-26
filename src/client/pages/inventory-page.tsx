@@ -1,4 +1,6 @@
 import { ArrowDownToLine, ArrowUpFromLine, Boxes, ClipboardList, SlidersHorizontal, TriangleAlert } from "lucide-react";
+import { canImportStock, canSeeCostPrice } from "@shared/permissions";
+import { useSession } from "@/features/auth/use-auth";
 import { useState } from "react";
 import { formatDate, formatNumber, formatVnd } from "@shared/format";
 import {
@@ -71,12 +73,19 @@ const stockColumns: Column<Product>[] = [
     key: "value",
     header: "Giá trị tồn",
     className: "hidden text-right lg:table-cell",
-    cell: (row) => <span className="tabular-nums">{formatVnd(row.quantity * row.costPrice)}</span>,
+    cell: (row) => <span className="tabular-nums">{row.costPrice === null ? "—" : formatVnd(row.quantity * row.costPrice)}</span>,
   },
   { key: "stock", header: "Tình trạng", className: "hidden sm:table-cell", cell: (row) => <StockBadge status={row.stockStatus} /> },
 ];
 
+/** Nhân viên không xem được giá nhập nên bỏ cột "Giá trị tồn" (server cũng trả giá nhập rỗng). */
+function useStockColumns() {
+  const { data: me } = useSession();
+  return me && canSeeCostPrice(me.role) ? stockColumns : stockColumns.filter((column) => column.key !== "value");
+}
+
 function StockTab() {
+  const visibleStockColumns = useStockColumns();
   const params = useListParams();
   const categories = useCategories();
   const list = useResourceList<Product>("inventory", "/inventory/balances", params.values);
@@ -104,7 +113,7 @@ function StockTab() {
         />
       </Toolbar>
       <DataTable
-        columns={stockColumns}
+        columns={visibleStockColumns}
         rows={list.data?.items}
         rowKey={(row) => row.id}
         pagination={list.data?.pagination}
@@ -119,6 +128,7 @@ function StockTab() {
 }
 
 function AlertList({ status, title }: { status: "low_stock" | "out_of_stock"; title: string }) {
+  const visibleStockColumns = useStockColumns();
   const list = useResourceList<Product>("inventory", "/inventory/balances", {
     stockStatus: status,
     status: "active",
@@ -132,7 +142,7 @@ function AlertList({ status, title }: { status: "low_stock" | "out_of_stock"; ti
         {title} {list.data && `(${list.data.pagination.total})`}
       </h2>
       <DataTable
-        columns={stockColumns}
+        columns={visibleStockColumns}
         rows={list.data?.items}
         rowKey={(row) => row.id}
         isLoading={list.isPending}
@@ -241,12 +251,15 @@ export default function InventoryPage() {
   const params = useListParams();
   const [creating, setCreating] = useState<DocumentKind | null>(null);
   const tab = params.get("tab") || "stock";
+  const { data: me } = useSession();
+  // Nhân viên không nhập kho (đơn giá phiếu nhập là giá nhập); server cũng chặn.
+  const mayImport = me ? canImportStock(me.role) : false;
 
   return (
     <>
       <PageHeader
         title="Quản lý kho"
-        description="Nhập kho, xuất kho, điều chỉnh và theo dõi tồn kho."
+        description={mayImport ? "Nhập kho, xuất kho, điều chỉnh và theo dõi tồn kho." : "Xuất kho, điều chỉnh và theo dõi tồn kho."}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={() => setCreating("adjust")}>
@@ -257,10 +270,12 @@ export default function InventoryPage() {
               <ArrowUpFromLine aria-hidden />
               Xuất kho
             </Button>
-            <Button onClick={() => setCreating("import")}>
-              <ArrowDownToLine aria-hidden />
-              Nhập kho
-            </Button>
+            {mayImport && (
+              <Button onClick={() => setCreating("import")}>
+                <ArrowDownToLine aria-hidden />
+                Nhập kho
+              </Button>
+            )}
           </div>
         }
       />

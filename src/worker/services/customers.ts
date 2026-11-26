@@ -152,7 +152,7 @@ function careEmployeeFor(actor: Actor, input: CustomerInput, existing?: Customer
 }
 
 /**
- * Chỉ Admin được thêm khách VIP, nâng khách lên VIP hoặc đổi hạng của khách đang là VIP.
+ * Chỉ Quản trị và Quản lý được thêm khách VIP, nâng khách lên VIP hoặc đổi hạng của khách đang là VIP.
  * Báo lỗi rõ ràng thay vì tự đổi giá trị, để người dùng biết vì sao.
  */
 function assertTierAllowed(actor: Actor, tier: CustomerInput["tier"], existing?: Customer) {
@@ -160,8 +160,8 @@ function assertTierAllowed(actor: Actor, tier: CustomerInput["tier"], existing?:
   const blocked = !canAssignTier(actor.role, tier) || (existing && !canAssignTier(actor.role, existing.tier));
   if (!blocked) return;
   const message = existing && !canAssignTier(actor.role, existing.tier)
-    ? "Chỉ quản trị viên mới được thay đổi hạng của khách hàng VIP"
-    : "Chỉ quản trị viên mới được thêm hoặc nâng khách hàng lên hạng VIP";
+    ? "Chỉ Quản lý hoặc Quản trị viên mới được thay đổi hạng của khách hàng VIP"
+    : "Chỉ Quản lý hoặc Quản trị viên mới được thêm hoặc nâng khách hàng lên hạng VIP";
   throw new ApiError(403, "FORBIDDEN", message, { tier: message });
 }
 

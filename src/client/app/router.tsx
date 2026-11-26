@@ -20,6 +20,8 @@ const AccountPage = lazy(() => import("@/pages/account-page"));
 const UsersPage = lazy(() => import("@/pages/users-page"));
 const AuditPage = lazy(() => import("@/pages/audit-page"));
 const GuidePage = lazy(() => import("@/pages/guide-page"));
+const TasksPage = lazy(() => import("@/pages/tasks-page"));
+const TeamsPage = lazy(() => import("@/pages/teams-page"));
 
 /** Trang không thuộc quyền của vai trò thì chuyển về trang đầu tiên được phép (server vẫn tự chặn API). */
 function Guard({ module, children }: { module: Module; children: React.ReactNode }) {
@@ -55,6 +57,8 @@ export const router = createBrowserRouter([
     errorElement: <RouteError />,
     children: [
       { path: "/", element: <Guard module="dashboard"><DashboardPage /></Guard> },
+      { path: "/cong-viec", element: <Guard module="tasks"><TasksPage /></Guard> },
+      { path: "/nhom", element: <Guard module="teams"><TeamsPage /></Guard> },
       { path: "/nhan-vien", element: <Guard module="employees"><EmployeesPage /></Guard> },
       { path: "/khach-hang", element: <Guard module="customers"><CustomersPage /></Guard> },
       { path: "/san-pham", element: <Guard module="products"><ProductsPage /></Guard> },

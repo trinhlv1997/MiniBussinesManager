@@ -159,7 +159,7 @@ export function DocumentFormDialog({
       form.setValue(`lines.${index}.defaultPrice`, price);
       form.setValue(`lines.${index}.unitPrice`, price);
     } else {
-      form.setValue(`lines.${index}.defaultPrice`, kind === "import" ? product.costPrice : undefined);
+      form.setValue(`lines.${index}.defaultPrice`, kind === "import" ? (product.costPrice ?? undefined) : undefined);
       form.setValue(`lines.${index}.unitPrice`, null);
     }
   };

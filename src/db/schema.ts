@@ -9,6 +9,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 import { ROLES } from "../shared/permissions";
+import { TASK_PRIORITIES, TASK_STATUSES } from "../shared/tasks";
 
 /**
  * Conventions
@@ -46,7 +47,13 @@ export const adminUsers = sqliteTable(
     displayName: text("display_name").notNull(),
     passwordHash: text("password_hash").notNull(),
     passwordChangedAt: text("password_changed_at").notNull().default(nowUtc),
-    role: text("role", { enum: ROLES }).notNull().default("admin"),
+    /**
+     * Vai trò thật (admin / manager / employee), cột `user_role` từ migration 0012.
+     * Cột cũ `role` có CHECK chỉ nhận admin/employee mà SQLite không sửa được (dựng lại bảng sẽ
+     * kéo theo SET NULL trên phiếu kho đã khoá), nên giữ lại làm `legacyRole` và ghi song song.
+     */
+    role: text("user_role", { enum: ROLES }).notNull().default("admin"),
+    legacyRole: text("role", { enum: ["admin", "employee"] }).notNull().default("admin"),
     /** Employee profile of this account; customers "picked" for that employee are visible to it. */
     employeeId: integer("employee_id").references((): AnySQLiteColumn => employees.id, { onDelete: "set null" }),
     /** Deactivated accounts cannot log in; they are kept so audit history keeps their name. */
@@ -57,7 +64,8 @@ export const adminUsers = sqliteTable(
   },
   (t) => [
     uniqueIndex("admin_users_employee_unique").on(t.employeeId).where(sql`${t.employeeId} IS NOT NULL`),
-    check("admin_users_role_check", sql`${t.role} IN ('admin', 'employee')`),
+    check("admin_users_role_check", sql`${t.legacyRole} IN ('admin', 'employee')`),
+    check("admin_users_user_role_check", sql`${t.role} IN ('admin', 'manager', 'employee')`),
   ],
 );
 
@@ -341,4 +349,81 @@ export const companySettings = sqliteTable(
     ...timestamps,
   },
   (t) => [check("company_settings_single_row", sql`${t.id} = 1`)],
+);
+
+/** Nhóm làm việc: một Quản lý phụ trách, nhiều thành viên. Quản lý thấy và giao việc cho thành viên nhóm mình. */
+export const teams = sqliteTable("teams", {
+  id: integer("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  description: text("description"),
+  managerId: integer("manager_id").references(() => adminUsers.id, { onDelete: "set null" }),
+  ...authorship,
+  ...timestamps,
+});
+
+/** Thành viên nhóm. Mỗi tài khoản thuộc tối đa một nhóm (unique user_id). */
+export const teamMembers = sqliteTable(
+  "team_members",
+  {
+    teamId: integer("team_id")
+      .notNull()
+      .references(() => teams.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().default(nowUtc),
+  },
+  (t) => [uniqueIndex("team_members_user_unique").on(t.userId), index("team_members_team_idx").on(t.teamId)],
+);
+
+/** Công việc. Ngày là `YYYY-MM-DD` theo giờ Việt Nam; tài khoản không bao giờ bị xoá nên người nhận dùng RESTRICT. */
+export const tasks = sqliteTable(
+  "tasks",
+  {
+    id: integer("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description"),
+    assigneeId: integer("assignee_id")
+      .notNull()
+      .references(() => adminUsers.id, { onDelete: "restrict" }),
+    assignerId: userRef("assigner_id"),
+    priority: text("priority", { enum: TASK_PRIORITIES }).notNull().default("medium"),
+    status: text("status", { enum: TASK_STATUSES }).notNull().default("open"),
+    startDate: text("start_date"),
+    dueDate: text("due_date").notNull(),
+    requiresReview: integer("requires_review", { mode: "boolean" }).notNull().default(false),
+    cancelRequestedAt: text("cancel_requested_at"),
+    cancelRequestReason: text("cancel_request_reason"),
+    cancelRequestedBy: userRef("cancel_requested_by"),
+    completedAt: text("completed_at"),
+    searchText: text("search_text").notNull().default(""),
+    ...authorship,
+    ...timestamps,
+  },
+  (t) => [
+    index("tasks_assignee_status_idx").on(t.assigneeId, t.status),
+    index("tasks_due_date_idx").on(t.dueDate),
+    check("tasks_priority_check", sql`${t.priority} IN ('low', 'medium', 'high', 'urgent')`),
+    check("tasks_status_check", sql`${t.status} IN ('open', 'in_progress', 'review', 'done', 'cancelled')`),
+    check("tasks_dates_check", sql`${t.startDate} IS NULL OR ${t.startDate} <= ${t.dueDate}`),
+  ],
+);
+
+/** Lịch sử thay đổi từng task: ai đổi trường nào, từ giá trị gì sang giá trị gì. Xoá task thì xoá theo. */
+export const taskHistory = sqliteTable(
+  "task_history",
+  {
+    id: integer("id").primaryKey(),
+    taskId: integer("task_id")
+      .notNull()
+      .references(() => tasks.id, { onDelete: "cascade" }),
+    actorId: userRef("actor_id"),
+    field: text("field").notNull(),
+    oldValue: text("old_value"),
+    newValue: text("new_value"),
+    /** Lý do / ghi chú người dùng nhập khi đổi trạng thái (không bắt buộc). */
+    note: text("note"),
+    createdAt: text("created_at").notNull().default(nowUtc),
+  },
+  (t) => [index("task_history_task_idx").on(t.taskId, t.id)],
 );

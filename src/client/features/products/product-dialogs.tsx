@@ -160,14 +160,15 @@ export function ProductDetailDialog({ id, onClose }: { id: number; onClose: () =
               ["Bảo hành", warrantyLabel(data.warrantyMonths)],
               ["Đơn vị tính", data.unit],
               ["Trạng thái", <ProductStatusBadge key="status" status={data.status} />],
-              ["Giá nhập", formatVnd(data.costPrice)],
+              // costPrice = null: tài khoản không được xem giá nhập (Nhân viên) → bỏ hẳn hai dòng liên quan.
+              ...(data.costPrice === null ? [] : ([["Giá nhập", formatVnd(data.costPrice)]] as [string, string][])),
               ["Giá phân phối", data.distributorPrice === null ? `${formatVnd(data.salePrice)} (bằng giá lẻ)` : formatVnd(data.distributorPrice)],
               ["Giá đại lý", data.dealerPrice === null ? `${formatVnd(data.salePrice)} (bằng giá lẻ)` : formatVnd(data.dealerPrice)],
               ["Giá khách lẻ", formatVnd(data.salePrice)],
               ["Số lượng tồn", `${formatNumber(data.quantity)} ${data.unit}`],
               ["Tồn tối thiểu", formatNumber(data.minStock)],
               ["Tình trạng tồn kho", <StockBadge key="stock" status={data.stockStatus} />],
-              ["Giá trị tồn", formatVnd(data.quantity * data.costPrice)],
+              ...(data.costPrice === null ? [] : ([["Giá trị tồn", formatVnd(data.quantity * data.costPrice)]] as [string, string][])),
               ["Mô tả", data.description],
               ...authorship(data),
             ]}

@@ -25,6 +25,8 @@ const columns = {
       WHEN 'employee' THEN (SELECT code FROM employees WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
       WHEN 'product' THEN (SELECT sku FROM products WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
       WHEN 'product_category' THEN (SELECT code FROM product_categories WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
+      WHEN 'task' THEN (SELECT title FROM tasks WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
+      WHEN 'team' THEN (SELECT name FROM teams WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
       WHEN 'admin_user' THEN (SELECT username FROM admin_users WHERE id = CAST(${auditLogs.entityId} AS INTEGER))
     END
   )`.as("entity_code"),

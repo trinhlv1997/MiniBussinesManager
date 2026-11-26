@@ -1,4 +1,5 @@
 import { and, asc, count, eq, isNull, ne, sql } from "drizzle-orm";
+import type { Role } from "@shared/permissions";
 import type { UserAccount, UserName } from "@shared/types";
 import type { UserCreateInput, UserUpdateInput } from "@shared/validation/users";
 import type { Db } from "../../db/client";
@@ -7,6 +8,9 @@ import type { Actor } from "../env";
 import { LAST_INSERT_ID, auditQuery, dbErrorText, notFound, runBatch } from "../lib/db";
 import { ApiError } from "../lib/errors";
 import { hashPassword } from "../lib/password";
+
+/** Cột `role` cũ chỉ nhận admin / employee (xem schema.ts): Quản lý ghi là employee ở cột này. */
+const legacyRoleOf = (role: Role) => (role === "admin" ? "admin" : "employee");
 
 const invalid = (field: string, message: string) => new ApiError(422, "VALIDATION_ERROR", message, { [field]: message });
 
@@ -79,6 +83,7 @@ export async function createUser(db: Db, pepper: string, actor: Actor, input: Us
           displayName: input.displayName,
           passwordHash,
           role: input.role,
+          legacyRole: legacyRoleOf(input.role),
           employeeId: input.employeeId,
         })
         .returning({ id: adminUsers.id }),
@@ -118,7 +123,13 @@ export async function updateUser(db: Db, actor: Actor, id: number, input: UserUp
   await runBatch(db, [
     db
       .update(adminUsers)
-      .set({ displayName: input.displayName, role: input.role, employeeId: input.employeeId, active: input.active })
+      .set({
+        displayName: input.displayName,
+        role: input.role,
+        legacyRole: legacyRoleOf(input.role),
+        employeeId: input.employeeId,
+        active: input.active,
+      })
       .where(eq(adminUsers.id, id)),
     // Khoá tài khoản thì đăng xuất ngay trên mọi thiết bị.
     ...(input.active ? [] : [db.delete(adminSessions).where(eq(adminSessions.userId, id))]),

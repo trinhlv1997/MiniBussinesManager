@@ -3,6 +3,7 @@ import { useState } from "react";
 import { formatNumber, formatVnd } from "@shared/format";
 import { priceForTier } from "@shared/pricing";
 import { PRODUCT_STATUS_LABELS, STOCK_STATUS_LABELS } from "@shared/labels";
+import { canManageCatalog, canSeeCostPrice } from "@shared/permissions";
 import type { Product } from "@shared/types";
 import { DataTable, type Column } from "@/components/common/data-table";
 import { ConfirmDialog } from "@/components/common/dialogs";
@@ -17,6 +18,7 @@ import {
 import { PageHeader } from "@/components/common/page-header";
 import { ProductStatusBadge, StockBadge } from "@/components/common/status";
 import { Button } from "@/components/ui/button";
+import { useSession } from "@/features/auth/use-auth";
 import { CategoryDialog } from "@/features/products/category-dialog";
 import {
   CATEGORIES,
@@ -33,12 +35,16 @@ import { toQueryString, useDeleteResource, useResourceList } from "@/lib/resourc
 export default function ProductsPage() {
   const params = useListParams();
   const dialog = useEntityDialog<Product>();
+  const { data: me } = useSession();
+  // Nhân viên chỉ xem sản phẩm và không thấy giá nhập (server cũng chặn / ẩn).
+  const manages = me ? canManageCatalog(me.role) : false;
+  const seesCost = me ? canSeeCostPrice(me.role) : false;
   const [categoriesOpen, setCategoriesOpen] = useState(false);
   const categories = useCategories();
   const list = useResourceList<Product>(PRODUCTS.key, PRODUCTS.path, params.values);
   const remove = useDeleteResource(PRODUCTS.key, PRODUCTS.path, ["inventory", CATEGORIES.key]);
 
-  const columns: Column<Product>[] = [
+  const allColumns: Column<Product>[] = [
     { key: "sku", header: "Mã SKU", sortKey: "sku", className: "hidden sm:table-cell", cell: (row) => <span className="font-medium">{row.sku}</span> },
     {
       key: "name",
@@ -66,7 +72,7 @@ export default function ProductsPage() {
       header: "Giá nhập",
       sortKey: "costPrice",
       className: "hidden text-right lg:table-cell",
-      cell: (row) => <span className="tabular-nums">{formatVnd(row.costPrice)}</span>,
+      cell: (row) => <span className="tabular-nums">{row.costPrice === null ? "—" : formatVnd(row.costPrice)}</span>,
     },
     {
       key: "salePrice",
@@ -113,12 +119,13 @@ export default function ProductsPage() {
         <RowActions
           label={row.name}
           onView={() => dialog.view(row)}
-          onEdit={() => dialog.edit(row)}
-          onDelete={() => dialog.remove(row)}
+          onEdit={manages ? () => dialog.edit(row) : undefined}
+          onDelete={manages ? () => dialog.remove(row) : undefined}
         />
       ),
     },
   ];
+  const columns = seesCost ? allColumns : allColumns.filter((column) => column.key !== "costPrice");
 
   const filters = {
     search: params.get("search"),
@@ -131,18 +138,26 @@ export default function ProductsPage() {
     <>
       <PageHeader
         title="Sản phẩm"
-        description="Quản lý thiết bị điện, đồ điện tử, thương hiệu, bảo hành và giá bán."
+        description={
+          manages
+            ? "Quản lý thiết bị điện, đồ điện tử, thương hiệu, bảo hành và giá bán."
+            : "Tra cứu thiết bị điện, đồ điện tử, bảo hành, giá bán và tồn kho."
+        }
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={() => setCategoriesOpen(true)}>
-              <FolderTree aria-hidden />
-              Danh mục
-            </Button>
+            {manages && (
+              <Button variant="outline" onClick={() => setCategoriesOpen(true)}>
+                <FolderTree aria-hidden />
+                Danh mục
+              </Button>
+            )}
             <ExportButton path={`/products/export${toQueryString(filters)}`} fileName="san-pham" />
-            <Button onClick={dialog.create}>
-              <Plus aria-hidden />
-              Thêm mới
-            </Button>
+            {manages && (
+              <Button onClick={dialog.create}>
+                <Plus aria-hidden />
+                Thêm mới
+              </Button>
+            )}
           </div>
         }
       />

@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Lightbulb, TriangleAlert } from "lucide-react";
 import { AUDIT_RETENTION_DAYS } from "@shared/audit";
 import { canAccess, type Module, type Role } from "@shared/permissions";
+import { PASSWORD_MIN_LENGTH } from "@shared/validation/auth";
 import { PageHeader } from "@/components/common/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
@@ -80,7 +81,7 @@ const SECTIONS: Section[] = [
         <H3>Đổi mật khẩu</H3>
         <Steps>
           <li>Bấm ảnh đại diện ở góc phải → <B>Tài khoản của tôi</B>.</li>
-          <li>Nhập mật khẩu hiện tại và mật khẩu mới (tối thiểu 12 ký tự), rồi lưu. Sau khi đổi, bạn đăng nhập lại bằng mật khẩu mới.</li>
+          <li>Nhập mật khẩu hiện tại và mật khẩu mới (tối thiểu {PASSWORD_MIN_LENGTH} ký tự), rồi lưu. Sau khi đổi, bạn đăng nhập lại bằng mật khẩu mới.</li>
         </Steps>
         <Note>Lần đầu đăng nhập bằng mật khẩu được cấp, hãy đổi ngay sang mật khẩu của riêng bạn.</Note>
       </>
@@ -95,13 +96,56 @@ const SECTIONS: Section[] = [
         <SimpleTable
           head={["Vai trò", "Được dùng"]}
           rows={[
-            [<B key="a">Quản trị (toàn quyền)</B>, "Toàn bộ hệ thống: Tổng quan, Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Người dùng, Nhật ký hoạt động, Cài đặt."],
+            [<B key="a">Quản trị (toàn quyền)</B>, "Toàn bộ hệ thống: Tổng quan, Công việc (mọi công việc), Nhân viên, Khách hàng, Sản phẩm, Quản lý kho, Báo cáo, Người dùng, Nhóm, Nhật ký hoạt động, Cài đặt."],
+            [
+              <B key="m">Quản lý</B>,
+              "Công việc của nhóm mình (tạo, giao, sửa, đổi mọi trạng thái kể cả Hủy), thêm / bớt thành viên nhóm mình, Khách hàng (kể cả thêm / sửa khách VIP), Sản phẩm, Quản lý kho, Báo cáo. Không xoá công việc, không vào Người dùng, Cài đặt.",
+            ],
             [
               <B key="e">Nhân viên</B>,
-              "Khách hàng, Sản phẩm, Quản lý kho. Chỉ thấy khách hàng mình được phân công chăm sóc hoặc do mình tạo; không đặt được hạng VIP; phiếu xuất chỉ giao cho khách trong phạm vi của mình.",
+              "Công việc được giao cho mình (Bắt đầu làm, Hoàn thành / Gửi duyệt, gửi yêu cầu hủy), Khách hàng, Sản phẩm (chỉ xem, không thấy giá nhập), Quản lý kho (Xuất kho, Điều chỉnh; không Nhập kho). Chỉ thấy khách hàng mình được phân công chăm sóc hoặc do mình tạo; không đặt được hạng VIP.",
             ],
           ]}
         />
+      </>
+    ),
+  },
+  {
+    id: "cong-viec",
+    title: "Công việc",
+    module: "tasks",
+    body: (
+      <>
+        <p>Giao việc và theo dõi tiến độ trên <B>bảng Kanban</B>: 5 cột theo trạng thái <B>Mới → Đang làm → Chờ duyệt → Hoàn thành</B>, và <B>Đã hủy</B>.</p>
+        <H3>Tạo và giao việc (Quản trị, Quản lý)</H3>
+        <Steps>
+          <li>Vào <B>Công việc</B> → <B>Tạo công việc</B>.</li>
+          <li>Nhập tiêu đề, mô tả, chọn <B>Người nhận</B>, <B>Độ ưu tiên</B> (Thấp / Trung bình / Cao / Khẩn), ngày bắt đầu và <B>hạn chót</B>.</li>
+          <li>Đánh dấu <B>Cần duyệt trước khi hoàn thành</B> nếu muốn kiểm tra kết quả trước khi đóng việc.</li>
+        </Steps>
+        <Note>Quản lý chỉ giao được cho thành viên trong nhóm mình (và cho chính mình). Nhóm do Quản trị viên lập ở mục <B>Nhóm</B>.</Note>
+        <H3>Đổi trạng thái</H3>
+        <Bullets>
+          <li><B>Kéo thẻ</B> sang cột khác. Trên điện thoại: nhấn giữ thẻ một chút rồi kéo; vuốt ngang để xem các cột. Cột không được thả sẽ mờ đi.</li>
+          <li>Hoặc bấm vào thẻ để mở chi tiết, rồi bấm nút như <B>Bắt đầu làm</B>, <B>Hoàn thành</B>, <B>Gửi duyệt</B>.</li>
+          <li>Mỗi lần đổi trạng thái có ô <B>Lý do / ghi chú</B> (không bắt buộc), ví dụ "chờ khách xác nhận", "thiếu hàng, dời sang tuần sau". Lý do hiện trong <B>Lịch sử thay đổi</B> của công việc.</li>
+        </Bullets>
+        <SimpleTable
+          head={["Vai trò", "Được chuyển"]}
+          rows={[
+            [<B key="e">Nhân viên</B>, "Mới → Đang làm → Hoàn thành. Việc cần duyệt: Đang làm → Chờ duyệt. Không được Hủy, chỉ gửi yêu cầu hủy."],
+            [<B key="m">Quản lý, Quản trị</B>, "Mọi bước hợp lệ: duyệt Chờ duyệt → Hoàn thành hoặc trả về Đang làm, Hủy, mở lại việc đã xong / đã hủy."],
+          ]}
+        />
+        <H3>Yêu cầu hủy</H3>
+        <p>Nhân viên mở công việc → <B>Yêu cầu hủy</B> → nhập lý do. Thẻ hiện nhãn "Xin hủy"; Quản lý mở thẻ và chọn <B>Đồng ý hủy</B> hoặc <B>Từ chối, tiếp tục làm</B>.</p>
+        <H3>Theo dõi</H3>
+        <Bullets>
+          <li>Thẻ hiện tiêu đề, người nhận, hạn chót và độ ưu tiên. Việc đã qua hạn mà chưa xong có nhãn đỏ <B>Quá hạn</B>.</li>
+          <li>Lọc theo người nhận, trạng thái, độ ưu tiên, khoảng ngày, hoặc tìm theo tiêu đề / mô tả. Bấm "… quá hạn" ở dòng tóm tắt để chỉ xem việc trễ.</li>
+          <li>Mỗi công việc có <B>Lịch sử thay đổi</B>: ai đổi trạng thái, hạn chót, người nhận… và lúc nào.</li>
+          <li>Cột Hoàn thành / Đã hủy chỉ hiện việc kết thúc trong 30 ngày gần nhất; lọc theo ngày để xem cũ hơn.</li>
+        </Bullets>
       </>
     ),
   },
@@ -170,7 +214,7 @@ const SECTIONS: Section[] = [
           <li>Lọc danh sách theo nhân viên chăm sóc, hoặc sắp xếp cột Hạng để đưa nhà phân phối lên đầu.</li>
           <li>Nhân viên tạo khách mới thì khách tự được giao cho chính họ; chỉ quản trị viên phân công lại được.</li>
         </Bullets>
-        <Note>Chỉ quản trị viên được thêm khách VIP, nâng khách lên VIP hoặc đổi hạng của khách VIP.</Note>
+        <Note>Chỉ Quản lý và Quản trị viên được thêm khách VIP, nâng khách lên VIP hoặc đổi hạng của khách VIP.</Note>
       </>
     ),
   },
@@ -180,6 +224,7 @@ const SECTIONS: Section[] = [
     module: "products",
     body: (
       <>
+        <Note>Tài khoản <B>Nhân viên</B> chỉ xem sản phẩm và danh mục: không thêm, sửa, xoá được, và không thấy <B>giá nhập</B> (cả cột Giá trị tồn, đơn giá phiếu nhập và file Excel).</Note>
         <H3>Danh mục</H3>
         <p>Nhóm sản phẩm theo danh mục (ví dụ: Thiết bị điện tử, Điện gia dụng) để lọc và xem báo cáo. Quản lý danh mục ngay trên màn hình <B>Sản phẩm</B>.</p>
         <H3>Thêm sản phẩm</H3>
@@ -201,7 +246,8 @@ const SECTIONS: Section[] = [
     body: (
       <>
         <p>Màn hình <B>Quản lý kho</B> có 3 thẻ: <B>Tồn kho</B> (số lượng và giá trị tồn từng sản phẩm), <B>Lịch sử giao dịch</B> (tất cả phiếu) và <B>Cảnh báo</B> (sản phẩm sắp hết / hết hàng).</p>
-        <H3>Nhập kho (hàng về)</H3>
+        <H3>Nhập kho (hàng về) — Quản lý, Quản trị</H3>
+        <p>Tài khoản <B>Nhân viên</B> không nhập kho (đơn giá phiếu nhập là giá nhập): không có nút Nhập kho, chỉ xem được phiếu nhập (không kèm giá), không xác nhận, hủy hay đảo ngược phiếu nhập.</p>
         <Steps>
           <li>Bấm <B>Nhập kho</B> ở góc phải.</li>
           <li>Chọn ngày, ghi <B>Tham chiếu</B> nếu có (số hoá đơn, số phiếu của nhà cung cấp…).</li>
@@ -273,6 +319,24 @@ const SECTIONS: Section[] = [
           <li><B>Đặt lại mật khẩu</B> khi người dùng quên. Họ sẽ bị đăng xuất khỏi mọi thiết bị.</li>
           <li>Hệ thống luôn giữ ít nhất một quản trị viên đang hoạt động; bạn không thể tự khoá hay tự hạ quyền chính mình.</li>
         </Bullets>
+      </>
+    ),
+  },
+  {
+    id: "nhom",
+    title: "Nhóm",
+    module: "teams",
+    body: (
+      <>
+        <H3>Quản trị: lập và sửa nhóm</H3>
+        <Steps>
+          <li>Vào <B>Nhóm</B> → <B>Tạo nhóm</B> (hoặc <B>Sửa</B> nhóm có sẵn): đặt tên, chọn <B>Trưởng nhóm</B>.</li>
+          <li>Trưởng nhóm chọn được mọi tài khoản đang hoạt động. Nếu người đó đang là Nhân viên, khi lưu sẽ <B>tự được nâng lên Quản lý</B> (form ghi rõ trước khi lưu).</li>
+          <li>Tích chọn <B>thành viên</B>. Danh sách gồm cả nhân viên <B>chưa có tài khoản</B>: tích vào thì nhập tên đăng nhập (đã gợi ý sẵn) và mật khẩu ban đầu, hệ thống tạo tài khoản Nhân viên cho họ khi lưu (tối đa 3 người mỗi lần lưu).</li>
+        </Steps>
+        <H3>Quản lý: thêm / bớt thành viên nhóm mình</H3>
+        <p>Vào <B>Nhóm</B> → <B>Thành viên</B>. Chỉ chọn được người đã có tài khoản; nhân viên chưa có tài khoản cần nhờ Quản trị tạo. Quản lý không đổi trưởng nhóm, không tạo hay xoá nhóm.</p>
+        <Note>Mỗi người chỉ thuộc một nhóm. Nhân viên đã nghỉ việc không hiện trong danh sách. Xoá nhóm không xoá công việc đã giao.</Note>
       </>
     ),
   },
@@ -354,7 +418,9 @@ export default function GuidePage() {
                 <h2 className="text-lg font-semibold">
                   {index + 1}. {section.title}
                 </h2>
-                {section.module && !canAccess("employee", section.module) && <Badge variant="secondary">Chỉ quản trị</Badge>}
+                {section.module && !canAccess("employee", section.module) && (
+                  <Badge variant="secondary">{canAccess("manager", section.module) ? "Quản lý, Quản trị" : "Chỉ quản trị"}</Badge>
+                )}
               </div>
               <div className="grid gap-2.5 text-sm leading-relaxed text-muted-foreground">{section.body}</div>
             </Card>

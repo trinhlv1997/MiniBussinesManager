@@ -30,7 +30,8 @@ export function RecipientDocuments({ filter }: { filter: { customerId: number } 
                 {document.code}
               </Link>
               <p className="text-xs text-muted-foreground">
-                {formatDate(document.transactionDate)} · {formatVnd(document.totalAmount)}
+                {formatDate(document.transactionDate)}
+                {document.totalAmount !== null && ` · ${formatVnd(document.totalAmount)}`}
               </p>
             </div>
             <DocumentStatusBadge status={document.status} />

@@ -34,6 +34,15 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "inventory.cancel": "Huỷ phiếu kho",
   "inventory.reverse": "Đảo ngược phiếu kho",
   "settings.update": "Sửa thông tin công ty",
+  "task.create": "Tạo công việc",
+  "task.update": "Sửa công việc",
+  "task.delete": "Xoá công việc",
+  "task.status": "Đổi trạng thái công việc",
+  "task.cancel_request": "Gửi yêu cầu hủy công việc",
+  "task.cancel_reject": "Từ chối yêu cầu hủy công việc",
+  "team.create": "Tạo nhóm",
+  "team.update": "Sửa nhóm",
+  "team.delete": "Xoá nhóm",
 };
 
 export const AUDIT_ENTITY_LABELS: Record<string, string> = {
@@ -44,6 +53,8 @@ export const AUDIT_ENTITY_LABELS: Record<string, string> = {
   product_category: "Danh mục",
   inventory_transaction: "Phiếu kho",
   company_settings: "Cài đặt",
+  task: "Công việc",
+  team: "Nhóm",
 };
 
 export const auditActionLabel = (action: string) => AUDIT_ACTION_LABELS[action] ?? action;
